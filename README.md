@@ -1,2 +1,20 @@
-# SMART-CONSTRUCTION-SAFETY
-건설현장 안전관리비, 인건비 내역 및 사진대지를 간편하게 작성하고 관리하는 스마트 솔루션입니다.
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
+
+# Run and deploy your AI Studio app
+
+This contains everything you need to run your app locally.
+
+View your app in AI Studio: https://ai.studio/apps/drive/1ZyG2xwSnvZ9XHVjThk289p7xosf81ZB2
+
+## Run Locally
+
+**Prerequisites:**  Node.js
+
+
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`
