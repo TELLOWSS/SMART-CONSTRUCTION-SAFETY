@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ProjectHeader } from './components/ProjectHeader';
 import { LaborCostTable } from './components/LaborCostTable';
 import { PhotoLedger } from './components/PhotoLedger';
@@ -6,7 +6,7 @@ import { DailyLogManager } from './components/DailyLogManager';
 import { GeminiAssistant } from './components/GeminiAssistant';
 import { UserGuide } from './components/UserGuide';
 import { ProjectInfo, Worker, PhotoEvidence, DailyAttendance } from './types';
-import { Printer, Layout, FileText, ShieldCheck, CalendarCheck, HelpCircle, BarChart3, ChevronRight, Clock } from 'lucide-react';
+import { Printer, Layout, FileText, ShieldCheck, CalendarCheck, HelpCircle, BarChart3, ChevronRight, Clock, Download, Upload, RotateCcw } from 'lucide-react';
 
 const INITIAL_PROJECT_INFO: ProjectInfo = {
   siteName: '',
@@ -25,6 +25,8 @@ function App() {
   const [attendance, setAttendance] = useState<DailyAttendance>({});
   const [photos, setPhotos] = useState<PhotoEvidence[]>([]);
   const [currentTime, setCurrentTime] = useState<string>('');
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Clock for Header (KST)
   useEffect(() => {
@@ -69,6 +71,98 @@ function App() {
     setTimeout(() => {
       window.print();
     }, 300);
+  };
+
+  // --- Backup & Restore Logic ---
+
+  const handleBackup = async () => {
+    if (!confirm("현재 작성 중인 데이터를 파일로 저장하시겠습니까?")) return;
+
+    // Convert Blob URLs in photos to Base64 for persistent storage
+    const photosWithBase64 = await Promise.all(photos.map(async (p) => {
+      // If it's already a data URL (base64), return as is
+      if (p.fileUrl.startsWith('data:')) return p;
+      
+      // If it's a blob URL, fetch and convert
+      try {
+        const response = await fetch(p.fileUrl);
+        const blob = await response.blob();
+        return new Promise<PhotoEvidence>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+             resolve({ ...p, fileUrl: reader.result as string });
+          };
+          reader.readAsDataURL(blob);
+        });
+      } catch (e) {
+        console.error("Image conversion failed", e);
+        return p; // Return original if fail (though it won't persist well)
+      }
+    }));
+
+    const backupData = {
+      version: "1.0",
+      date: new Date().toISOString(),
+      data: {
+        projectInfo,
+        workers,
+        attendance,
+        photos: photosWithBase64
+      }
+    };
+
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", `세이프닥_백업_${projectInfo.siteName || '무제'}_${new Date().toISOString().slice(0,10)}.json`);
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
+
+  const handleRestoreClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''; // Reset to allow same file selection
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileReader = new FileReader();
+    if (e.target.files && e.target.files.length > 0) {
+      fileReader.readAsText(e.target.files[0], "UTF-8");
+      fileReader.onload = (event) => {
+        try {
+          if (event.target?.result) {
+            const parsed = JSON.parse(event.target.result as string);
+            if (parsed.data) {
+               if(confirm("기존 데이터가 덮어씌워집니다. 복구하시겠습니까?")) {
+                  setProjectInfo(parsed.data.projectInfo || INITIAL_PROJECT_INFO);
+                  setWorkers(parsed.data.workers || []);
+                  setAttendance(parsed.data.attendance || {});
+                  setPhotos(parsed.data.photos || []);
+                  alert("데이터가 성공적으로 복구되었습니다.");
+               }
+            } else {
+              alert("올바르지 않은 백업 파일 형식입니다.");
+            }
+          }
+        } catch (error) {
+          console.error(error);
+          alert("파일을 읽는 중 오류가 발생했습니다.");
+        }
+      };
+    }
+  };
+
+  const handleReset = () => {
+    if (confirm("모든 데이터를 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) {
+      setProjectInfo(INITIAL_PROJECT_INFO);
+      setWorkers([]);
+      setAttendance({});
+      setPhotos([]);
+      alert("초기화되었습니다.");
+    }
   };
 
   // Calculate stats for dashboard
@@ -148,6 +242,40 @@ function App() {
            {/* Right: Actions (Order 2 on mobile to be right, Order 3 on desktop) */}
            <div className="order-2 md:order-3 flex items-center gap-2 shrink-0">
               <GeminiAssistant projectInfo={projectInfo} workers={workers} photos={photos} />
+              
+              {/* Data Management Buttons */}
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+                <button 
+                  onClick={handleBackup}
+                  className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-white rounded-md transition-all"
+                  title="데이터 파일 저장 (백업)"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+                <button 
+                  onClick={handleRestoreClick}
+                  className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-white rounded-md transition-all"
+                  title="데이터 파일 불러오기 (복구)"
+                >
+                  <Upload className="w-4 h-4" />
+                </button>
+                <input 
+                  type="file" 
+                  ref={fileInputRef}
+                  onChange={handleFileChange} 
+                  className="hidden" 
+                  accept=".json"
+                />
+                <div className="w-px h-4 bg-slate-300 mx-0.5"></div>
+                <button 
+                  onClick={handleReset}
+                  className="p-1.5 text-slate-600 hover:text-red-600 hover:bg-white rounded-md transition-all"
+                  title="초기화"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+              </div>
+
               <button 
                 onClick={handlePrint}
                 className="flex items-center gap-2 bg-slate-900 hover:bg-black text-white px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-md hover:shadow-lg active:scale-95 whitespace-nowrap"
