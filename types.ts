@@ -1,3 +1,4 @@
+
 export interface SignatureStyle {
   rotation: number; // degrees
   offsetX: number; // px
@@ -30,6 +31,16 @@ export interface Worker {
   // New fields for detailed report
   rrn: string; // Resident Registration Number
   address: string;
+}
+
+export interface SafetyItem {
+  id: string;
+  name: string; // 품명
+  spec: string; // 규격
+  unit: string; // 단위
+  quantity: number; // 수량
+  unitPrice: number; // 단가
+  note: string; // 비고
 }
 
 export interface PhotoEvidence {

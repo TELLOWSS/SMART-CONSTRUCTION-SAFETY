@@ -1,6 +1,7 @@
+
 import React, { useState } from 'react';
 import { Worker, PhotoEvidence, DailyAttendance, PHOTO_CATEGORIES } from '../types';
-import { Calendar, ChevronLeft, ChevronRight, CheckCircle2, Circle, Camera, Plus, MapPin, ImagePlus, Edit3, User, Clock } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, CheckCircle2, Circle, Camera, Plus, MapPin, ImagePlus, Edit3, User, Clock, Loader2 } from 'lucide-react';
 
 interface Props {
   workers: Worker[];
@@ -11,7 +12,14 @@ interface Props {
 }
 
 export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAttendance, photos, setPhotos }) => {
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  // Use local date string instead of UTC to fix timezone issues
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const now = new Date();
+    const localDate = new Date(now.getTime() - (now.getTimezoneOffset() * 60000));
+    return localDate.toISOString().split('T')[0];
+  });
+  
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const changeDate = (days: number) => {
     const date = new Date(selectedDate);
@@ -30,18 +38,80 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
 
   const todaysPhotos = photos.filter(p => p.date === selectedDate);
   
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      const newPhoto: PhotoEvidence = {
-        id: crypto.randomUUID(),
-        fileUrl: URL.createObjectURL(file),
-        category: PHOTO_CATEGORIES[0],
-        description: '',
-        location: '',
-        date: selectedDate,
+  // Image Compression Utility
+  const compressImage = (file: File): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 1280; // Optimized width for A4 report
+          const MAX_HEIGHT = 1280;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error("Failed to get canvas context"));
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("Image compression failed"));
+          }, 'image/jpeg', 0.7); // 70% quality JPEG
+        };
+        img.onerror = (err) => reject(err);
       };
-      setPhotos([...photos, newPhoto]);
+      reader.onerror = (err) => reject(err);
+    });
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setIsProcessing(true);
+      try {
+        const file = e.target.files[0];
+        // Compress image before storing
+        const compressedBlob = await compressImage(file);
+        
+        const newPhoto: PhotoEvidence = {
+          id: crypto.randomUUID(),
+          fileUrl: URL.createObjectURL(compressedBlob),
+          category: PHOTO_CATEGORIES[0],
+          description: '',
+          location: '',
+          date: selectedDate,
+        };
+        setPhotos([...photos, newPhoto]);
+      } catch (error) {
+        console.error("Photo upload failed:", error);
+        alert("사진 처리 중 오류가 발생했습니다.");
+      } finally {
+        setIsProcessing(false);
+        // Reset input
+        e.target.value = '';
+      }
     }
   };
 
@@ -52,6 +122,10 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
   };
 
   const removePhoto = (id: string) => {
+    const photoToRemove = photos.find(p => p.id === id);
+    if (photoToRemove?.fileUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(photoToRemove.fileUrl);
+    }
     setPhotos(photos.filter(p => p.id !== id));
   };
 
@@ -149,9 +223,10 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
               </div>
               금일 작업 사진
             </h3>
-            <label className="cursor-pointer flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95">
-              <Plus className="w-3 h-3" /> 사진 추가
-              <input type="file" className="hidden" accept="image/*" onChange={handlePhotoUpload} />
+            <label className={`cursor-pointer flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 ${isProcessing ? 'opacity-70 cursor-wait' : ''}`}>
+              {isProcessing ? <Loader2 className="w-3 h-3 animate-spin"/> : <Plus className="w-3 h-3" />}
+              {isProcessing ? '처리중...' : '사진 추가'}
+              <input type="file" className="hidden" accept="image/*" onChange={handlePhotoUpload} disabled={isProcessing} />
             </label>
            </div>
 

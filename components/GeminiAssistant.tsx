@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
-import { ProjectInfo, Worker, PhotoEvidence } from '../types';
+import { ProjectInfo, Worker, PhotoEvidence, SafetyItem } from '../types';
 import { GoogleGenAI } from '@google/genai';
 import { Sparkles, Loader2, FileText, Wand2 } from 'lucide-react';
 
 interface Props {
   projectInfo: ProjectInfo;
   workers: Worker[];
+  safetyItems: SafetyItem[];
   photos: PhotoEvidence[];
 }
 
-export const GeminiAssistant: React.FC<Props> = ({ projectInfo, workers, photos }) => {
+export const GeminiAssistant: React.FC<Props> = ({ projectInfo, workers, safetyItems, photos }) => {
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<string>('');
   const [showModal, setShowModal] = useState(false);
@@ -26,9 +27,28 @@ export const GeminiAssistant: React.FC<Props> = ({ projectInfo, workers, photos 
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
-      const totalCost = workers.reduce((acc, curr) => acc + (curr.daysWorked * curr.dailyRate), 0);
+      const totalLaborCost = workers.reduce((acc, curr) => acc + (curr.daysWorked * curr.dailyRate), 0);
+      const totalMaterialCost = safetyItems.reduce((acc, curr) => acc + (curr.quantity * curr.unitPrice), 0);
+      
       const workerSummary = workers.map(w => `- ${w.name} (${w.role}): ${w.daysWorked} 공수`).join('\n');
-      const photoSummary = photos.map(p => `- ${p.category} (${p.location})`).join('\n');
+      const itemSummary = safetyItems.map(i => `- ${i.name} (${i.quantity}${i.unit}): ${i.quantity * i.unitPrice}원`).join('\n');
+      
+      // Group photos by category for better summarization
+      const photoGroups = photos.reduce((acc, photo) => {
+        if (!acc[photo.category]) {
+          acc[photo.category] = { count: 0, descriptions: [] };
+        }
+        acc[photo.category].count++;
+        if (photo.description) {
+           acc[photo.category].descriptions.push(photo.description);
+        }
+        return acc;
+      }, {} as Record<string, { count: number, descriptions: string[] }>);
+
+      const photoSummary = Object.entries(photoGroups).map(([category, data]: [string, { count: number, descriptions: string[] }]) => {
+          const descText = data.descriptions.length > 0 ? ` (주요내용: ${data.descriptions.slice(0, 3).join(', ')} 등)` : '';
+          return `- ${category}: 총 ${data.count}장${descText}`;
+      }).join('\n');
 
       // Professional prompt for Korean Construction Report
       const prompt = `
@@ -38,18 +58,25 @@ export const GeminiAssistant: React.FC<Props> = ({ projectInfo, workers, photos 
         - 현장명: ${projectInfo.siteName}
         - 귀속월: ${projectInfo.year}년 ${projectInfo.month}월
         - 담당자: ${projectInfo.managerName}
-        - 총 인건비 집행액: ${totalCost.toLocaleString()} 원
+        - 총 인건비 집행액: ${totalLaborCost.toLocaleString()} 원
+        - 총 시설/재료비 집행액: ${totalMaterialCost.toLocaleString()} 원
+        
         - 투입 근로자 상세:
         ${workerSummary}
-        - 주요 안전 조치 활동(사진대지 기반):
+
+        - 안전시설 구매/설치 상세:
+        ${itemSummary}
+        
+        - 주요 안전 조치 활동(사진대지 요약):
         ${photoSummary}
         
         [요청사항]
         1. 문체: 정중하고 격식 있는 '하십시오'체 (공문서/보고서 스타일).
         2. 구성:
-           - [개요]: 현장명과 해당 월의 집행 총액 요약.
-           - [주요 집행 내역]: 인건비 투입 현황을 간략히 요약 (누가 어떤 업무를 했는지).
-           - [주요 안전 활동 실적]: 사진 데이터를 바탕으로 어떤 안전 조치가 이루어졌는지 서술.
+           - [개요]: 현장명과 해당 월의 집행 총액(인건비+재료비) 요약.
+           - [인건비 집행 내역]: 인건비 투입 현황을 간략히 요약 (누가 어떤 업무를 했는지).
+           - [안전시설비 집행 내역]: 어떤 안전 물품이나 시설이 확충되었는지 요약.
+           - [주요 안전 활동 실적]: 사진대지 요약 데이터를 바탕으로 어떤 분야의 안전 관리가 집중적으로 이루어졌는지 분석하여 서술.
            - [맺음말]: 안전 관리에 만전을 기하겠다는 다짐.
         3. 불필요한 미사여구는 빼고, 사실 위주로 명확하게 작성하세요.
       `;
@@ -102,7 +129,7 @@ export const GeminiAssistant: React.FC<Props> = ({ projectInfo, workers, photos 
                     <Loader2 className="w-12 h-12 animate-spin text-indigo-600 relative z-10" />
                   </div>
                   <p className="mt-6 text-lg font-medium text-slate-800">현장 데이터를 분석 중입니다...</p>
-                  <p className="text-sm text-slate-400 mt-2">Gemini Pro가 최적의 보고서 문구를 작성하고 있습니다.</p>
+                  <p className="text-sm text-slate-400 mt-2">Gemini가 최적의 보고서 문구를 작성하고 있습니다.</p>
                 </div>
               ) : (
                 <div className="space-y-6">

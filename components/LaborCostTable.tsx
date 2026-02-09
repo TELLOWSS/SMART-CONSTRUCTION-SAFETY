@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Worker, WORKER_ROLES, DailyAttendance } from '../types';
 import { Plus, Trash2, Users, AlertCircle, CalendarDays, ChevronDown, ChevronUp } from 'lucide-react';
@@ -63,7 +64,7 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
       <div className="mb-8 break-inside-avoid">
         <h3 className="text-lg font-bold mb-3 flex items-center gap-2 text-slate-800">
           <span className="w-1.5 h-6 bg-slate-800 inline-block rounded-sm"></span>
-          1. 산업안전보건관리비 인건비 집행 상세 내역
+          1. 안전시설 인건비 제출 증빙 양식
         </h3>
         
         <div className="space-y-4">
@@ -76,7 +77,7 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
                 {/* Header Row: Basic Info */}
                 <div className="grid grid-cols-12 bg-slate-100 border-b border-slate-400">
                   <div className="col-span-1 border-r border-slate-300 p-1.5 text-center font-bold">성명</div>
-                  <div className="col-span-2 border-r border-slate-300 p-1.5 text-center bg-white">{worker.name}</div>
+                  <div className="col-span-2 border-r border-slate-300 p-1.5 text-center bg-white whitespace-nowrap overflow-hidden text-ellipsis">{worker.name}</div>
                   <div className="col-span-2 border-r border-slate-300 p-1.5 text-center font-bold">주민등록번호</div>
                   <div className="col-span-2 border-r border-slate-300 p-1.5 text-center bg-white">{worker.rrn || '-'}</div>
                   <div className="col-span-1 border-r border-slate-300 p-1.5 text-center font-bold">주소</div>
@@ -93,8 +94,8 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
                        const val = getDailyValue(worker.id, day);
                        return (
                         <div key={day} className="border-r border-slate-200 last:border-r-0">
-                          <div className="bg-slate-50 border-b border-slate-200 text-[8px] h-4 flex items-center justify-center text-slate-500">{day}</div>
-                          <div className="h-6 flex items-center justify-center font-bold text-slate-800">
+                          <div className="bg-slate-50 border-b border-slate-200 text-[7px] h-4 flex items-center justify-center text-slate-500">{day}</div>
+                          <div className="h-6 flex items-center justify-center font-bold text-slate-800 text-[9px] tracking-tighter">
                             {val === 1 ? '1' : val === 0.5 ? '0.5' : ''}
                           </div>
                         </div>
@@ -110,7 +111,7 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
                 {/* Footer Row: Financials */}
                 <div className="grid grid-cols-12 bg-white">
                   <div className="col-span-1 border-r border-slate-300 p-1.5 text-center font-bold bg-slate-50">직종</div>
-                  <div className="col-span-2 border-r border-slate-300 p-1.5 text-center">{worker.role}</div>
+                  <div className="col-span-2 border-r border-slate-300 p-1.5 text-center whitespace-nowrap overflow-hidden text-ellipsis">{worker.role}</div>
                   
                   <div className="col-span-1 border-r border-slate-300 p-1.5 text-center font-bold bg-slate-50">출력공수</div>
                   <div className="col-span-1 border-r border-slate-300 p-1.5 text-center font-bold">{worker.daysWorked}</div>
@@ -154,7 +155,7 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
           <div className="bg-indigo-100 p-2 rounded-xl text-indigo-600">
              <Users className="w-5 h-5" />
           </div>
-          인건비 산출 기초 정보
+          안전시설 인건비 산출 정보
         </h2>
         <button
           onClick={addWorker}
@@ -199,6 +200,8 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
                       type="number"
                       value={worker.dailyRate}
                       onChange={(e) => updateWorker(worker.id, 'dailyRate', Number(e.target.value))}
+                      // Prevent scroll from changing value
+                      onWheel={(e) => (e.target as HTMLInputElement).blur()}
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-right font-mono focus:border-indigo-500 outline-none bg-white"
                       placeholder="0"
                     />

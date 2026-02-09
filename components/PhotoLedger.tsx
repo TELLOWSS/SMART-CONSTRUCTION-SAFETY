@@ -1,6 +1,7 @@
-import React from 'react';
+
+import React, { useState } from 'react';
 import { PhotoEvidence, PHOTO_CATEGORIES } from '../types';
-import { ImagePlus, MapPin, Calendar, X, Camera } from 'lucide-react';
+import { ImagePlus, MapPin, Calendar, X, Camera, Loader2 } from 'lucide-react';
 
 interface Props {
   photos: PhotoEvidence[];
@@ -9,19 +10,80 @@ interface Props {
 }
 
 export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = false }) => {
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      const newPhoto: PhotoEvidence = {
-        id: crypto.randomUUID(),
-        fileUrl: URL.createObjectURL(file),
-        category: PHOTO_CATEGORIES[0],
-        description: '',
-        location: '',
-        date: new Date().toISOString().split('T')[0],
+  // Image Compression Utility (Duplicated for component isolation, in a real app would be a shared util)
+  const compressImage = (file: File): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 1280; 
+          const MAX_HEIGHT = 1280;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error("Failed to get canvas context"));
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("Image compression failed"));
+          }, 'image/jpeg', 0.7);
+        };
+        img.onerror = (err) => reject(err);
       };
-      setPhotos([...photos, newPhoto]);
+      reader.onerror = (err) => reject(err);
+    });
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setIsProcessing(true);
+      try {
+        const file = e.target.files[0];
+        const compressedBlob = await compressImage(file);
+
+        const newPhoto: PhotoEvidence = {
+          id: crypto.randomUUID(),
+          fileUrl: URL.createObjectURL(compressedBlob),
+          category: PHOTO_CATEGORIES[0],
+          description: '',
+          location: '',
+          date: new Date().toISOString().split('T')[0],
+        };
+        setPhotos([...photos, newPhoto]);
+      } catch (error) {
+        console.error("Photo upload failed", error);
+        alert("사진 처리 중 오류가 발생했습니다.");
+      } finally {
+        setIsProcessing(false);
+        e.target.value = ''; // Reset input
+      }
     }
   };
 
@@ -30,19 +92,27 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
   };
 
   const removePhoto = (id: string) => {
+    const photoToRemove = photos.find(p => p.id === id);
+    if (photoToRemove?.fileUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(photoToRemove.fileUrl);
+    }
     setPhotos(photos.filter(p => p.id !== id));
   };
 
   if (readOnly) {
+    // Sort photos by date for the report
+    const sortedPhotos = [...photos].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
     return (
       <div className="break-before-page mt-8">
         <h3 className="text-lg font-bold mb-3 flex items-center gap-2 text-slate-800">
           <span className="w-1.5 h-6 bg-slate-800 inline-block rounded-sm"></span>
-          2. 산업안전보건관리비 항목별 증빙 사진대지
+          3. 산업안전보건관리비 항목별 증빙 사진대지
         </h3>
-        <div className="grid grid-cols-2 gap-0 border border-slate-400">
-          {photos.map((photo, index) => (
-            <div key={photo.id} className="print-break-inside-avoid border-b border-r border-slate-400 p-2 last:border-b-0 even:border-r-0">
+        {/* Improved Border Logic: Container has Top/Left, Items have Right/Bottom */}
+        <div className="grid grid-cols-2 gap-0 border-t border-l border-slate-400">
+          {sortedPhotos.map((photo, index) => (
+            <div key={photo.id} className="print-break-inside-avoid border-r border-b border-slate-400 p-2">
               <div className="aspect-[4/3] w-full overflow-hidden border border-slate-200 mb-2 relative bg-gray-100 flex items-center justify-center">
                  <img src={photo.fileUrl} alt={photo.category} className="object-contain w-full h-full" />
               </div>
@@ -68,10 +138,14 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
               </div>
             </div>
           ))}
-          {photos.length === 0 && (
-             <div className="col-span-2 text-center py-24 text-slate-400 bg-slate-50 italic">
+          {sortedPhotos.length === 0 && (
+             <div className="col-span-2 text-center py-24 text-slate-400 bg-slate-50 italic border-r border-b border-slate-400">
                (첨부된 증빙 사진이 없습니다)
              </div>
+          )}
+          {/* If odd number of photos, fill the empty cell to complete the grid border */}
+          {sortedPhotos.length > 0 && sortedPhotos.length % 2 !== 0 && (
+             <div className="border-r border-b border-slate-400"></div>
           )}
         </div>
       </div>
@@ -87,10 +161,10 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
           </div>
           증빙 사진 업로드
         </h2>
-        <label className="cursor-pointer bg-slate-900 hover:bg-black text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-md active:scale-95">
-          <ImagePlus className="w-4 h-4" />
-          사진 파일 추가
-          <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
+        <label className={`cursor-pointer bg-slate-900 hover:bg-black text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-md active:scale-95 ${isProcessing ? 'opacity-70 cursor-wait' : ''}`}>
+          {isProcessing ? <Loader2 className="w-4 h-4 animate-spin"/> : <ImagePlus className="w-4 h-4" />}
+          {isProcessing ? '처리중...' : '사진 파일 추가'}
+          <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} disabled={isProcessing} />
         </label>
       </div>
 
