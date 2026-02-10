@@ -436,9 +436,6 @@ function App() {
                restorePhotosWithValidation(parsed.data.photos || []);
                
                alert("✅ 데이터가 성공적으로 복구되었습니다.");
-              }
-            } else {
-              alert("올바르지 않은 백업 파일 형식입니다.");
             }
           }
         } catch (error) {
