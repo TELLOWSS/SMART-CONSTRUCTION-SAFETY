@@ -110,6 +110,20 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
       setIsProcessing(true);
       try {
         const file = e.target.files[0];
+        
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+          alert('이미지 파일만 업로드 가능합니다. (JPEG, PNG, WebP, GIF)');
+          return;
+        }
+
+        // Validate file size (max 20MB for original)
+        const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+        if (file.size > MAX_FILE_SIZE) {
+          alert(`파일 크기가 너무 큽니다. (최대 20MB)\n현재 크기: ${(file.size / 1024 / 1024).toFixed(1)}MB`);
+          return;
+        }
+
         // Compress image before storing
         const compressedBlob = await compressImage(file);
         
@@ -124,7 +138,8 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
         setPhotos([...photos, newPhoto]);
       } catch (error) {
         console.error("Photo upload failed:", error);
-        alert("사진 처리 중 오류가 발생했습니다.");
+        const errorMsg = error instanceof Error ? error.message : '알 수 없는 오류';
+        alert(`사진 처리 중 오류가 발생했습니다.\n${errorMsg}`);
       } finally {
         setIsProcessing(false);
         // Reset input

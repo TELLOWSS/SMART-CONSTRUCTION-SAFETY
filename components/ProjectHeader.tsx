@@ -78,7 +78,7 @@ export const ProjectHeader: React.FC<Props> = ({ info, onChange, readOnly = fals
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div className="group">
-            <label className="block text-xs font-semibold text-slate-500 mb-2 ml-1 uppercase tracking-wider">공사명 (현장명)</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-2 ml-1 uppercase tracking-wider">공사명 <span className="text-red-500 font-bold">*</span></label>
             <div className="flex items-center border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 group-focus-within:bg-white group-focus-within:ring-2 group-focus-within:ring-indigo-500 group-focus-within:border-transparent transition-all duration-200">
               <Building className="w-5 h-5 text-slate-400 mr-3" />
               <input
@@ -87,12 +87,13 @@ export const ProjectHeader: React.FC<Props> = ({ info, onChange, readOnly = fals
                 onChange={(e) => handleChange('siteName', e.target.value)}
                 className="bg-transparent w-full outline-none text-slate-800 font-medium placeholder-slate-400"
                 placeholder="예: OO아파트 신축공사"
+                required
               />
             </div>
           </div>
 
           <div className="group">
-            <label className="block text-xs font-semibold text-slate-500 mb-2 ml-1 uppercase tracking-wider">사용 연월</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-2 ml-1 uppercase tracking-wider">사용 연월 <span className="text-red-500 font-bold">*</span></label>
             <div className="flex items-center gap-2">
               <div className="flex items-center border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 flex-1 group-focus-within:bg-white group-focus-within:ring-2 group-focus-within:ring-indigo-500 group-focus-within:border-transparent transition-all">
                 <Calendar className="w-5 h-5 text-slate-400 mr-3" />
@@ -146,7 +147,7 @@ export const ProjectHeader: React.FC<Props> = ({ info, onChange, readOnly = fals
 
           {/* Manager Input with Signature */}
           <div className="group">
-            <label className="block text-xs font-semibold text-slate-500 mb-2 ml-1 uppercase tracking-wider">현장대리인 (청구인)</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-2 ml-1 uppercase tracking-wider">현장대리인 <span className="text-red-500 font-bold">*</span></label>
             <div className="flex gap-2">
               <div className="flex-1 flex items-center border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 group-focus-within:bg-white group-focus-within:ring-2 group-focus-within:ring-indigo-500 group-focus-within:border-transparent transition-all duration-200">
                 <User className="w-5 h-5 text-slate-400 mr-3" />
@@ -156,6 +157,7 @@ export const ProjectHeader: React.FC<Props> = ({ info, onChange, readOnly = fals
                   onChange={(e) => handleChange('managerName', e.target.value)}
                   className="bg-transparent w-full outline-none text-slate-800 font-medium placeholder-slate-400"
                   placeholder="김철수"
+                  required
                 />
               </div>
               <button 
@@ -174,7 +176,7 @@ export const ProjectHeader: React.FC<Props> = ({ info, onChange, readOnly = fals
 
           {/* Safety Manager Input with Signature */}
           <div className="group">
-            <label className="block text-xs font-semibold text-slate-500 mb-2 ml-1 uppercase tracking-wider">안전팀장 (확인자)</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-2 ml-1 uppercase tracking-wider">안전팀장 <span className="text-red-500 font-bold">*</span></label>
             <div className="flex gap-2">
               <div className="flex-1 flex items-center border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 group-focus-within:bg-white group-focus-within:ring-2 group-focus-within:ring-indigo-500 group-focus-within:border-transparent transition-all duration-200">
                 <UserCheck className="w-5 h-5 text-slate-400 mr-3" />
@@ -184,6 +186,7 @@ export const ProjectHeader: React.FC<Props> = ({ info, onChange, readOnly = fals
                   onChange={(e) => handleChange('safetyManagerName', e.target.value)}
                   className="bg-transparent w-full outline-none text-slate-800 font-medium placeholder-slate-400"
                   placeholder="이영희"
+                  required
                 />
               </div>
               <button 

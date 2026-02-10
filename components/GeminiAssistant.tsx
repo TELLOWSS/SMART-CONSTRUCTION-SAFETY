@@ -14,10 +14,17 @@ export const GeminiAssistant: React.FC<Props> = ({ projectInfo, workers, safetyI
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<string>('');
   const [showModal, setShowModal] = useState(false);
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
   const generateReport = async () => {
-    if (!process.env.API_KEY) {
-      alert("API 키가 설정되지 않았습니다. 환경변수를 확인해주세요.");
+    if (!apiKey) {
+      alert("⚠️ API 키가 설정되지 않았습니다.\n\n1. .env.local 파일을 생성하세요.\n2. VITE_GEMINI_API_KEY=your_api_key를 입력하세요.\n3. npm run dev를 다시 실행하세요.\n\nAPI 키는 https://ai.google.dev에서 생성할 수 있습니다.");
+      return;
+    }
+
+    // Validate project data
+    if (!projectInfo.siteName) {
+      alert("공사명을 입력하세요.");
       return;
     }
 
@@ -25,7 +32,7 @@ export const GeminiAssistant: React.FC<Props> = ({ projectInfo, workers, safetyI
     setShowModal(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey });
       
       const totalLaborCost = workers.reduce((acc, curr) => acc + (curr.daysWorked * curr.dailyRate), 0);
       const totalMaterialCost = safetyItems.reduce((acc, curr) => acc + (curr.quantity * curr.unitPrice), 0);
@@ -95,7 +102,7 @@ export const GeminiAssistant: React.FC<Props> = ({ projectInfo, workers, safetyI
     }
   };
 
-  if (!process.env.API_KEY) return null;
+  if (!apiKey) return null;
 
   return (
     <>

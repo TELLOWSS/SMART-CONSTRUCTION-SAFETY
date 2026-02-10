@@ -9,6 +9,13 @@ import { GeminiAssistant } from './components/GeminiAssistant';
 import { UserGuide } from './components/UserGuide';
 import { ProjectInfo, Worker, PhotoEvidence, DailyAttendance, SafetyItem } from './types';
 import { Printer, Layout, FileText, ShieldCheck, CalendarCheck, HelpCircle, BarChart3, ChevronRight, Clock, Download, Upload, RotateCcw, ShoppingCart, Loader2, Save, FilePlus } from 'lucide-react';
+import { 
+  validatePhotoData, 
+  createBlobUrlFromBase64, 
+  processInChunks,
+  getPhotoStats,
+  base64ToBlob
+} from './utils/photoOptimization';
 
 // Helper to get local date string (YYYY-MM-DD) correctly considering timezone offset
 const getLocalDateString = () => {
@@ -38,7 +45,8 @@ function App() {
   const [safetyItems, setSafetyItems] = useState<SafetyItem[]>([]);
   const [photos, setPhotos] = useState<PhotoEvidence[]>([]);
   const [currentTime, setCurrentTime] = useState<string>('');
-  const [isBackingUp, setIsBackingUp] = useState(false); // New state for backup loading
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [backupProgress, setBackupProgress] = useState(0);
   const [isPrinting, setIsPrinting] = useState(false); // New state for print loading
   const [showSafetyCost, setShowSafetyCost] = useState(true); // Toggle for Material Cost in Report
   
@@ -152,7 +160,52 @@ function App() {
     );
   }, [attendance]);
 
+  // Validation function for required fields before report generation
+  const validateBeforePrint = (): { isValid: boolean; errors: string[] } => {
+    const errors: string[] = [];
+    
+    // Required fields validation
+    if (!projectInfo.siteName?.trim()) {
+      errors.push("공사명을 입력하세요.");
+    }
+    if (!projectInfo.managerName?.trim()) {
+      errors.push("현장대리인 이름을 입력하세요.");
+    }
+    if (!projectInfo.safetyManagerName?.trim()) {
+      errors.push("안전팀장 이름을 입력하세요.");
+    }
+    if (!projectInfo.companyName?.trim()) {
+      errors.push("업체명(수급인)을 입력하세요.");
+    }
+    
+    // Business logic validation
+    if (workers.length === 0) {
+      errors.push("최소 1명 이상의 근로자를 등록하세요.");
+    }
+    
+    // Year month validation
+    if (!projectInfo.year || projectInfo.year < 1900 || projectInfo.year > 2100) {
+      errors.push("올바른 연도를 입력하세요.");
+    }
+    if (!projectInfo.month || projectInfo.month < 1 || projectInfo.month > 12) {
+      errors.push("올바른 월을 입력하세요.");
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  };
+
   const handlePrint = () => {
+    const validation = validateBeforePrint();
+    
+    if (!validation.isValid) {
+      alert(`❌ 보고서를 생성할 수 없습니다.\n다음 항목들을 확인하세요:\n\n${validation.errors.map(e => `• ${e}`).join('\n')}`);
+      setActiveTab('setup');
+      return;
+    }
+
     setIsPrinting(true);
     setActiveTab('preview');
     // Allow React to render the preview view completely before triggering print
@@ -165,17 +218,29 @@ function App() {
 
   // --- Backup & Restore Logic ---
 
-  // Helper: Convert Blob to Base64 string
-  const blobToBase64 = (blob: Blob): Promise<string> => {
+  // Helper: Convert Blob to Base64 string with optimization
+  const blobToBase64Optimized = (blob: Blob): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => {
-        if (typeof reader.result === 'string') resolve(reader.result);
-        else reject(new Error("Failed to convert blob to base64"));
+        try {
+          if (typeof reader.result === 'string') {
+            resolve(reader.result);
+          } else {
+            reject(new Error("Base64 변환 실패"));
+          }
+        } catch (error) {
+          reject(error);
+        }
       };
-      reader.onerror = reject;
+      reader.onerror = () => reject(new Error("파일 읽기 실패"));
       reader.readAsDataURL(blob);
     });
+  };
+
+  // Helper: Convert Blob to Base64 string
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return blobToBase64Optimized(blob);
   };
 
   const handleBackup = async () => {
@@ -194,33 +259,67 @@ function App() {
         return;
     }
 
-    if (!confirm("현재 작성 중인 데이터를 파일(JSON)로 저장하시겠습니까?\n(사진 용량에 따라 시간이 소요될 수 있습니다)")) return;
+    if (!confirm(`현재 작성 중인 데이터를 파일(JSON)로 저장하시겠습니까?\n\n- 공사명: ${projectInfo.siteName || '(미입력)'}\n- 근로자: ${workers.length}명\n- 사진: ${photos.length}장\n\n(사진 용량에 따라 시간이 소요될 수 있습니다)`)) return;
 
     setIsBackingUp(true);
+    setBackupProgress(0);
 
     try {
-      // 1. Convert Photos: Handle Blob URLs to Base64
-      // Use Promise.all to process all photos in parallel
-      const photosWithBase64 = await Promise.all(photos.map(async (p) => {
-        // If it's already a data URL (base64) or empty, return as is
-        if (!p.fileUrl || p.fileUrl.startsWith('data:')) return p;
-        
-        try {
-          // Fetch the blob data from the blob: URL
-          const response = await fetch(p.fileUrl);
-          const blob = await response.blob();
-          const base64 = await blobToBase64(blob);
-          return { ...p, fileUrl: base64 };
-        } catch (e) {
-          console.error(`Failed to export photo ${p.id}`, e);
-          // Return with empty URL so we don't break the whole backup, but log error
-          return { ...p, fileUrl: '' }; 
+      // 1. Convert Photos: Handle Blob URLs to Base64 (청크 단위 처리로 메모리 효율)
+      const photosWithBase64 = await processInChunks(
+        photos,
+        async (p) => {
+          // If it's already a data URL (base64) or empty, return as is
+          if (!p.fileUrl || p.fileUrl.startsWith('data:')) return p;
+          
+          try {
+            // Fetch the blob data from the blob: URL
+            const response = await fetch(p.fileUrl);
+            if (!response.ok) {
+              console.warn(`사진 ${p.id} 로드 실패 (HTTP ${response.status})`);
+              return { ...p, fileUrl: '' }; 
+            }
+            
+            const blob = await response.blob();
+            const base64 = await blobToBase64Optimized(blob);
+            return { ...p, fileUrl: base64 };
+          } catch (e) {
+            console.error(`사진 내보내기 실패 ${p.id}`, e);
+            return { ...p, fileUrl: '' }; 
+          }
+        },
+        5, // 청크 크기: 5개씩
+        (current, total) => {
+          setBackupProgress(Math.round((current / total) * 100));
         }
-      }));
+      );
+
+      // 사진 통계 계산
+      const photoStats = getPhotoStats(
+        photosWithBase64
+          .filter(p => p.fileUrl)
+          .map(p => ({
+            id: p.id,
+            filename: p.category,
+            size: Math.round((p.fileUrl.length * 0.75)), // Base64는 33% 크기 증가
+            mimeType: p.fileUrl.startsWith('data:image/webp') ? 'image/webp' : 'image/jpeg',
+            timestamp: p.date,
+            checksum: '', // 개별 체크섬은 이미 생성됨
+            quality: 70 // 기본 품질
+          }))
+      );
 
       const backupData = {
-        version: "1.1",
+        version: "1.2",
         date: new Date().toISOString(),
+        appVersion: "1.0",
+        photoStats: {
+          totalCount: photoStats.totalCount,
+          totalMB: photoStats.totalMB,
+          formats: photoStats.formats,
+          qualities: photoStats.qualities,
+          notes: '사진은 자동으로 최적화되어 저장됩니다'
+        },
         data: {
           projectInfo,
           workers,
@@ -231,6 +330,14 @@ function App() {
       };
 
       const jsonString = JSON.stringify(backupData);
+      
+      // Check estimated size
+      const estimatedSize = new Blob([jsonString]).size;
+      if (estimatedSize > 100 * 1024 * 1024) {
+        alert("⚠️ 백업 파일이 너무 큽니다 (100MB 이상).\n사진을 일부 삭제하고 다시 시도하세요.");
+        return;
+      }
+
       const blob = new Blob([jsonString], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       
@@ -248,11 +355,20 @@ function App() {
         URL.revokeObjectURL(url);
       }, 100);
 
+      alert(`✅ 백업이 완료되었습니다.\n파일 크기: ${(blob.size / 1024 / 1024).toFixed(1)}MB\n사진: ${photosWithBase64.filter(p => p.fileUrl).length}/${photos.length}장`);
+
     } catch (error) {
       console.error("Backup failed", error);
-      alert("백업 파일 생성 중 오류가 발생했습니다.\n(메모리 부족 또는 브라우저 제한일 수 있습니다)");
+      if (error instanceof RangeError) {
+        alert("⚠️ 데이터가 너무 큽니다.\n사진을 일부 삭제하고 다시 시도하세요.");
+      } else if (error instanceof TypeError) {
+        alert("⚠️ 데이터 변환 중 오류가 발생했습니다.\n (특정 파일이 손상되었을 가능성)");
+      } else {
+        alert("백업 파일 생성 중 오류가 발생했습니다.\n(메모리 부족 또는 브라우저 제한일 수 있습니다)");
+      }
     } finally {
       setIsBackingUp(false);
+      setBackupProgress(0);
     }
   };
 
@@ -266,36 +382,137 @@ function App() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileReader = new FileReader();
     if (e.target.files && e.target.files.length > 0) {
-      fileReader.readAsText(e.target.files[0], "UTF-8");
+      const file = e.target.files[0];
+      
+      // Validate file type
+      if (!file.name.endsWith('.json')) {
+        alert('JSON 형식의 세이프닥 백업 파일을 선택하세요.');
+        return;
+      }
+
+      // Validate file size (max 100MB)
+      if (file.size > 100 * 1024 * 1024) {
+        alert('파일이 너무 큽니다. (최대 100MB)');
+        return;
+      }
+
+      fileReader.readAsText(file, "UTF-8");
       fileReader.onload = (event) => {
         try {
           if (event.target?.result) {
             const parsed = JSON.parse(event.target.result as string);
-            if (parsed.data) {
-               if(confirm("기존 데이터가 덮어씌워집니다. 복구하시겠습니까?")) {
-                  // Clean up existing blob URLs to prevent memory leaks before overwriting
-                  photos.forEach(p => {
-                    if (p.fileUrl && p.fileUrl.startsWith('blob:')) {
-                      URL.revokeObjectURL(p.fileUrl);
-                    }
-                  });
+            
+            // Enhanced validation
+            if (!parsed.data) {
+              alert("올바르지 않은 백업 파일 형식입니다.\n'data' 필드가 없습니다.");
+              return;
+            }
 
-                  setProjectInfo(parsed.data.projectInfo || INITIAL_PROJECT_INFO);
-                  setWorkers(parsed.data.workers || []);
-                  setAttendance(parsed.data.attendance || {});
-                  setSafetyItems(parsed.data.safetyItems || []);
-                  setPhotos(parsed.data.photos || []);
-                  alert("데이터가 성공적으로 복구되었습니다.");
-               }
+            // Version check (optional but recommended for future compatibility)
+            const version = parsed.version || "1.0";
+            if (version.startsWith("2") || version.startsWith("3")) {
+              alert(`⚠️ 이 백업 파일은 더 최신 버전(${version})으로 생성되었습니다.\n앱을 최신 버전으로 업데이트하세요.`);
+              return;
+            }
+
+            if(confirm("기존 데이터가 덮어씌워집니다. 복구하시겠습니까?")) {
+               // Clean up existing blob URLs to prevent memory leaks before overwriting
+               photos.forEach(p => {
+                 if (p.fileUrl && p.fileUrl.startsWith('blob:')) {
+                   URL.revokeObjectURL(p.fileUrl);
+                 }
+               });
+
+               // Validate and restore with defaults
+               setProjectInfo({
+                 ...INITIAL_PROJECT_INFO,
+                 ...parsed.data.projectInfo
+               });
+               setWorkers(Array.isArray(parsed.data.workers) ? parsed.data.workers : []);
+               setAttendance(parsed.data.attendance && typeof parsed.data.attendance === 'object' ? parsed.data.attendance : {});
+               setSafetyItems(Array.isArray(parsed.data.safetyItems) ? parsed.data.safetyItems : []);
+               
+               // 사진 복구 - 안전하게 청크 단위로 처리
+               restorePhotosWithValidation(parsed.data.photos || []);
+               
+               alert("✅ 데이터가 성공적으로 복구되었습니다.");
+              }
             } else {
               alert("올바르지 않은 백업 파일 형식입니다.");
             }
           }
         } catch (error) {
-          console.error(error);
-          alert("파일을 읽는 중 오류가 발생했습니다.");
+          console.error("Restore failed:", error);
+          if (error instanceof SyntaxError) {
+            alert("파일 형식이 손상되었습니다. 올바른 JSON 백업 파일인지 확인하세요.");
+          } else {
+            alert(`파일을 읽는 중 오류가 발생했습니다:\n${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+          }
         }
       };
+      
+      fileReader.onerror = () => {
+        alert("파일 읽기에 실패했습니다. 다시 시도하세요.");
+      };
+    }
+  };
+
+  // 사진 복구 - 추가된 안전성 검증
+  const restorePhotosWithValidation = async (photosToRestore: PhotoEvidence[]) => {
+    const restoredPhotos: PhotoEvidence[] = [];
+    const failedPhotos: string[] = [];
+
+    for (const photo of photosToRestore) {
+      try {
+        if (!photo.fileUrl) {
+          console.warn(`사진 ${photo.id}: URL 없음`);
+          continue;
+        }
+
+        // Base64 데이터 검증
+        if (photo.fileUrl.startsWith('data:')) {
+          // Base64 형식 검증
+          if (!photo.fileUrl.includes(',')) {
+            failedPhotos.push(photo.id);
+            continue;
+          }
+
+          // Blob URL 재생성
+          try {
+            const mimeType = photo.fileUrl.match(/data:([^;]+)/)?.[1] || 'image/jpeg';
+            const blobUrl = createBlobUrlFromBase64(photo.fileUrl, mimeType);
+            
+            if (blobUrl) {
+              restoredPhotos.push({
+                ...photo,
+                fileUrl: blobUrl
+              });
+            } else {
+              failedPhotos.push(photo.id);
+            }
+          } catch (error) {
+            console.error(`사진 ${photo.id} Blob URL 생성 실패:`, error);
+            failedPhotos.push(photo.id);
+          }
+        } else {
+          // 기존 Blob URL는 그대로 사용
+          restoredPhotos.push(photo);
+        }
+      } catch (error) {
+        console.error(`사진 복구 중 오류 ${photo.id}:`, error);
+        failedPhotos.push(photo.id);
+      }
+
+      // 메모리 부담 완화를 위한 짧은 대기
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+
+    setPhotos(restoredPhotos);
+
+    // 복구 결과 알림
+    if (failedPhotos.length > 0) {
+      console.warn(`${failedPhotos.length}개의 사진이 복구되지 않았습니다:`, failedPhotos);
+      alert(`⚠️ ${restoredPhotos.length}/${photosToRestore.length}개의 사진이 복구되었습니다.\n(${failedPhotos.length}개는 손상되었거나 복구할 수 없습니다)`);
     }
   };
 
@@ -655,42 +872,55 @@ function App() {
                       <p className="text-xl font-bold mb-12 tracking-wider font-serif">위와 같이 산업안전보건관리비(인건비 및 안전시설비) 사용내역을 청구합니다.</p>
                       <div className="flex flex-col items-end pr-8 gap-4">
                          <p className="text-lg font-serif font-bold">{formatDateToKorean(projectInfo.reportDate)}</p>
-                         <div className="text-right mt-6">
-                           <div className="flex items-center justify-end gap-6 mb-3">
-                              <span className="font-bold text-lg font-serif">청 구 인 (현장소장) :</span>
-                              <div className="flex items-center gap-8 min-w-[180px] border-b border-slate-800 pb-1 justify-between px-2 relative overflow-visible">
-                                <span className="text-lg font-serif relative z-20">{projectInfo.managerName}</span>
-                                {projectInfo.managerSignature ? (
-                                  <img 
-                                    src={projectInfo.managerSignature} 
-                                    alt="signature" 
-                                    style={{
-                                        transform: `rotate(${projectInfo.managerSignatureStyle?.rotation || 0}deg) translate(${projectInfo.managerSignatureStyle?.offsetX || 0}px, ${projectInfo.managerSignatureStyle?.offsetY || 0}px) scale(${projectInfo.managerSignatureStyle?.scale || 1.2})`,
-                                        mixBlendMode: 'multiply'
-                                    }}
-                                    className="absolute right-0 -bottom-4 h-20 w-auto z-10 origin-center pointer-events-none"
-                                  />
-                                ) : (
-                                  <span className="text-sm text-slate-600 font-serif z-0">(인)</span>
+                         <div className="text-right mt-8 space-y-6">
+                           {/* Manager Signature */}
+                           <div className="flex items-start justify-end gap-6">
+                              <span className="font-bold text-lg font-serif pt-1">청 구 인 (현장소장) :</span>
+                              <div className="flex flex-col items-center h-24">
+                                <div className="relative w-32 h-20 flex items-end justify-between px-2 border-b-2 border-slate-900">
+                                  <span className="text-lg font-serif text-slate-900 leading-none pb-1">{projectInfo.managerName}</span>
+                                  {projectInfo.managerSignature && (
+                                    <img 
+                                      src={projectInfo.managerSignature} 
+                                      alt="manager_signature" 
+                                      style={{
+                                          transform: `rotate(${projectInfo.managerSignatureStyle?.rotation || 0}deg) translate(${projectInfo.managerSignatureStyle?.offsetX || 0}px, ${projectInfo.managerSignatureStyle?.offsetY || 0}px) scale(${projectInfo.managerSignatureStyle?.scale || 1.0})`,
+                                          mixBlendMode: 'darken'
+                                      }}
+                                      className="h-16 w-auto origin-center pointer-events-none"
+                                    />
+                                  )}
+                                </div>
+                                {!projectInfo.managerSignature && (
+                                  <div className="w-32 flex items-center justify-end px-2 -mt-8">
+                                    <span className="text-sm text-slate-500 font-serif">(서명)</span>
+                                  </div>
                                 )}
                               </div>
                            </div>
-                           <div className="flex items-center justify-end gap-6">
-                              <span className="font-bold text-lg font-serif">확 인 자 (안전팀장) :</span>
-                              <div className="flex items-center gap-8 min-w-[180px] border-b border-slate-800 pb-1 justify-between px-2 relative overflow-visible">
-                                <span className="text-lg font-serif relative z-20">{projectInfo.safetyManagerName}</span>
-                                {projectInfo.safetyManagerSignature ? (
-                                  <img 
-                                    src={projectInfo.safetyManagerSignature} 
-                                    alt="signature" 
-                                    style={{
-                                        transform: `rotate(${projectInfo.safetyManagerSignatureStyle?.rotation || 0}deg) translate(${projectInfo.safetyManagerSignatureStyle?.offsetX || 0}px, ${projectInfo.safetyManagerSignatureStyle?.offsetY || 0}px) scale(${projectInfo.safetyManagerSignatureStyle?.scale || 1.2})`,
-                                        mixBlendMode: 'multiply'
-                                    }}
-                                    className="absolute right-0 -bottom-4 h-20 w-auto z-10 origin-center pointer-events-none"
-                                  />
-                                ) : (
-                                  <span className="text-sm text-slate-600 font-serif z-0">(인)</span>
+
+                           {/* Safety Manager Signature */}
+                           <div className="flex items-start justify-end gap-6">
+                              <span className="font-bold text-lg font-serif pt-1">확 인 자 (안전팀장) :</span>
+                              <div className="flex flex-col items-center h-24">
+                                <div className="relative w-32 h-20 flex items-end justify-between px-2 border-b-2 border-slate-900">
+                                  <span className="text-lg font-serif text-slate-900 leading-none pb-1">{projectInfo.safetyManagerName}</span>
+                                  {projectInfo.safetyManagerSignature && (
+                                    <img 
+                                      src={projectInfo.safetyManagerSignature} 
+                                      alt="safety_signature" 
+                                      style={{
+                                          transform: `rotate(${projectInfo.safetyManagerSignatureStyle?.rotation || 0}deg) translate(${projectInfo.safetyManagerSignatureStyle?.offsetX || 0}px, ${projectInfo.safetyManagerSignatureStyle?.offsetY || 0}px) scale(${projectInfo.safetyManagerSignatureStyle?.scale || 1.0})`,
+                                          mixBlendMode: 'darken'
+                                      }}
+                                      className="h-16 w-auto origin-center pointer-events-none"
+                                    />
+                                  )}
+                                </div>
+                                {!projectInfo.safetyManagerSignature && (
+                                  <div className="w-32 flex items-center justify-end px-2 -mt-8">
+                                    <span className="text-sm text-slate-500 font-serif">(서명)</span>
+                                  </div>
                                 )}
                               </div>
                            </div>
