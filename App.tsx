@@ -8,7 +8,7 @@ import { DailyLogManager } from './components/DailyLogManager';
 import { GeminiAssistant } from './components/GeminiAssistant';
 import { UserGuide } from './components/UserGuide';
 import { ProjectInfo, Worker, PhotoEvidence, DailyAttendance, SafetyItem } from './types';
-import { Printer, Layout, FileText, ShieldCheck, CalendarCheck, HelpCircle, BarChart3, ChevronRight, Clock, Download, Upload, RotateCcw, ShoppingCart, Loader2, Save } from 'lucide-react';
+import { Printer, Layout, FileText, ShieldCheck, CalendarCheck, HelpCircle, BarChart3, ChevronRight, Clock, Download, Upload, RotateCcw, ShoppingCart, Loader2, Save, FilePlus } from 'lucide-react';
 
 // Helper to get local date string (YYYY-MM-DD) correctly considering timezone offset
 const getLocalDateString = () => {
@@ -39,6 +39,8 @@ function App() {
   const [photos, setPhotos] = useState<PhotoEvidence[]>([]);
   const [currentTime, setCurrentTime] = useState<string>('');
   const [isBackingUp, setIsBackingUp] = useState(false); // New state for backup loading
+  const [isPrinting, setIsPrinting] = useState(false); // New state for print loading
+  const [showSafetyCost, setShowSafetyCost] = useState(true); // Toggle for Material Cost in Report
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -88,6 +90,7 @@ function App() {
       // Only save if there is some data changed from initial
       if (
         projectInfo.siteName || 
+        projectInfo.managerName || // Track manager name changes too
         workers.length > 0 || 
         safetyItems.length > 0 || 
         Object.keys(attendance).length > 0
@@ -150,56 +153,67 @@ function App() {
   }, [attendance]);
 
   const handlePrint = () => {
+    setIsPrinting(true);
     setActiveTab('preview');
-    // Allow React to render the preview view before printing
+    // Allow React to render the preview view completely before triggering print
+    // Increased timeout to ensure browser layout is finalized
     setTimeout(() => {
       window.print();
-    }, 300);
+      setIsPrinting(false);
+    }, 800);
   };
 
   // --- Backup & Restore Logic ---
 
+  // Helper: Convert Blob to Base64 string
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') resolve(reader.result);
+        else reject(new Error("Failed to convert blob to base64"));
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
   const handleBackup = async () => {
-    // Check for empty data
-    const hasData = projectInfo.siteName || workers.length > 0 || safetyItems.length > 0 || photos.length > 0;
+    // Check for empty data - Expanded conditions
+    const hasData = 
+      projectInfo.siteName || 
+      projectInfo.managerName || 
+      projectInfo.safetyManagerName || 
+      projectInfo.companyName || 
+      workers.length > 0 || 
+      safetyItems.length > 0 || 
+      photos.length > 0;
+
     if (!hasData) {
-        alert("저장할 데이터가 없습니다. 기본 설정이나 일일 관리를 먼저 작성해주세요.");
+        alert("저장할 데이터가 없습니다. 기본 설정 정보를 입력하거나 사진을 추가해주세요.");
         return;
     }
 
-    if (!confirm("현재 작성 중인 데이터를 파일로 저장하시겠습니까? (사진 용량에 따라 시간이 소요될 수 있습니다)")) return;
+    if (!confirm("현재 작성 중인 데이터를 파일(JSON)로 저장하시겠습니까?\n(사진 용량에 따라 시간이 소요될 수 있습니다)")) return;
 
     setIsBackingUp(true);
 
     try {
-      // Convert Blob URLs in photos to Base64 for persistent storage
+      // 1. Convert Photos: Handle Blob URLs to Base64
+      // Use Promise.all to process all photos in parallel
       const photosWithBase64 = await Promise.all(photos.map(async (p) => {
         // If it's already a data URL (base64) or empty, return as is
         if (!p.fileUrl || p.fileUrl.startsWith('data:')) return p;
         
-        // If it's a blob URL, fetch and convert
         try {
+          // Fetch the blob data from the blob: URL
           const response = await fetch(p.fileUrl);
           const blob = await response.blob();
-          return new Promise<PhotoEvidence>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              if (typeof reader.result === 'string') {
-                 resolve({ ...p, fileUrl: reader.result });
-              } else {
-                 // Should technically not happen with readAsDataURL but good for type safety
-                 resolve({ ...p, fileUrl: '' });
-              }
-            };
-            reader.onerror = () => {
-              console.error(`Failed to read blob for photo ${p.id}`);
-              resolve({ ...p, fileUrl: '' }); // Return empty url on read error
-            };
-            reader.readAsDataURL(blob);
-          });
+          const base64 = await blobToBase64(blob);
+          return { ...p, fileUrl: base64 };
         } catch (e) {
-          console.error(`Image conversion failed for photo ${p.id}`, e);
-          // Vital: Return empty string instead of original blob URL to avoid broken links on restore
+          console.error(`Failed to export photo ${p.id}`, e);
+          // Return with empty URL so we don't break the whole backup, but log error
           return { ...p, fileUrl: '' }; 
         }
       }));
@@ -216,23 +230,27 @@ function App() {
         }
       };
 
-      // IMPROVED: Use Blob and URL.createObjectURL to handle large files
       const jsonString = JSON.stringify(backupData);
       const blob = new Blob([jsonString], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       
-      const downloadAnchorNode = document.createElement('a');
-      downloadAnchorNode.setAttribute("href", url);
-      downloadAnchorNode.setAttribute("download", `세이프닥_백업_${projectInfo.siteName || '무제'}_${new Date().toISOString().slice(0,10)}.json`);
-      document.body.appendChild(downloadAnchorNode);
-      downloadAnchorNode.click();
+      const link = document.createElement('a');
+      link.href = url;
+      // Sanitize filename
+      const safeSiteName = (projectInfo.siteName || '무제').replace(/[/\\?%*:|"<>]/g, '-');
+      link.download = `세이프닥_백업_${safeSiteName}_${getLocalDateString()}.json`;
+      document.body.appendChild(link);
+      link.click();
       
-      // Cleanup
-      downloadAnchorNode.remove();
-      URL.revokeObjectURL(url);
+      // Delay cleanup to ensure download triggers on all browsers
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 100);
+
     } catch (error) {
       console.error("Backup failed", error);
-      alert("백업 파일 생성 중 오류가 발생했습니다. 데이터 용량이 너무 크거나 브라우저 메모리가 부족할 수 있습니다.");
+      alert("백업 파일 생성 중 오류가 발생했습니다.\n(메모리 부족 또는 브라우저 제한일 수 있습니다)");
     } finally {
       setIsBackingUp(false);
     }
@@ -281,8 +299,42 @@ function App() {
     }
   };
 
+  // New Feature: Reset only monthly data (keep workers)
+  const handleNewMonth = () => {
+    if (confirm("현재 등록된 '근로자'와 '현장 정보'는 유지하고,\n'일일 출역'과 '사진'만 초기화하여 새로운 달을 시작하시겠습니까?")) {
+        // Clear daily log data
+        setAttendance({});
+        setPhotos(prev => {
+            // Revoke URLs to avoid leaks
+            prev.forEach(p => {
+                if (p.fileUrl && p.fileUrl.startsWith('blob:')) URL.revokeObjectURL(p.fileUrl);
+            });
+            return [];
+        });
+        
+        // Advance month automatically (optional convenience)
+        setProjectInfo(prev => {
+           let nextMonth = prev.month + 1;
+           let nextYear = prev.year;
+           if (nextMonth > 12) {
+               nextMonth = 1;
+               nextYear += 1;
+           }
+           return {
+               ...prev,
+               year: nextYear,
+               month: nextMonth,
+               reportDate: getLocalDateString() // Reset report date to today
+           };
+        });
+
+        alert("월간 데이터가 초기화되었습니다.\n근로자 명단은 유지됩니다.");
+        setActiveTab('daily');
+    }
+  };
+
   const handleReset = () => {
-    if (confirm("모든 데이터를 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) {
+    if (confirm("모든 데이터를 완전히 삭제하고 초기화하시겠습니까?\n(이 작업은 되돌릴 수 없습니다)")) {
       // Critical: Revoke all object URLs to free memory
       photos.forEach(p => {
         if (p.fileUrl && p.fileUrl.startsWith('blob:')) {
@@ -389,6 +441,7 @@ function App() {
               {/* Data Management Buttons */}
               <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
                 <button 
+                  type="button"
                   onClick={handleBackup}
                   disabled={isBackingUp}
                   className={`p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-white rounded-md transition-all ${isBackingUp ? 'cursor-wait opacity-50' : ''}`}
@@ -397,6 +450,7 @@ function App() {
                   {isBackingUp ? <Loader2 className="w-4 h-4 animate-spin text-indigo-600"/> : <Download className="w-4 h-4" />}
                 </button>
                 <button 
+                  type="button"
                   onClick={handleRestoreClick}
                   className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-white rounded-md transition-all"
                   title="데이터 파일 불러오기 (복구)"
@@ -410,22 +464,37 @@ function App() {
                   className="hidden" 
                   accept=".json"
                 />
+                
                 <div className="w-px h-4 bg-slate-300 mx-0.5"></div>
+                
+                {/* New Month Button */}
                 <button 
+                  type="button"
+                  onClick={handleNewMonth}
+                  className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-white rounded-md transition-all"
+                  title="새로운 달 작성 (근로자/현장정보 유지, 데이터 초기화)"
+                >
+                  <FilePlus className="w-4 h-4" />
+                </button>
+                
+                <button 
+                  type="button"
                   onClick={handleReset}
                   className="p-1.5 text-slate-600 hover:text-red-600 hover:bg-white rounded-md transition-all"
-                  title="초기화"
+                  title="전체 초기화 (모두 삭제)"
                 >
                   <RotateCcw className="w-4 h-4" />
                 </button>
               </div>
 
               <button 
+                type="button"
                 onClick={handlePrint}
-                className="flex items-center gap-2 bg-slate-900 hover:bg-black text-white px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-md hover:shadow-lg active:scale-95 whitespace-nowrap"
+                disabled={isPrinting}
+                className={`flex items-center gap-2 bg-slate-900 hover:bg-black text-white px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-md hover:shadow-lg active:scale-95 whitespace-nowrap ${isPrinting ? 'opacity-70 cursor-wait' : ''}`}
               >
-                <Printer className="w-4 h-4" />
-                <span className="hidden sm:inline">PDF 저장</span>
+                {isPrinting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+                <span className="hidden sm:inline">{isPrinting ? '준비 중...' : 'PDF 저장'}</span>
               </button>
            </div>
         </div>
@@ -538,7 +607,21 @@ function App() {
 
         {/* Report Preview Tab */}
         {activeTab === 'preview' && (
-          <div className="bg-white shadow-2xl min-h-[29.7cm] max-w-[21cm] mx-auto print:shadow-none print:w-full print:max-w-none animate-in zoom-in-95 duration-300 origin-top rounded-sm">
+          <div className="flex flex-col items-center w-full">
+            {/* Print Options Toolbar - New addition */}
+            <div className="w-full max-w-[21cm] mb-4 flex justify-end gap-3 no-print animate-in fade-in slide-in-from-top-2">
+                 <label className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200 cursor-pointer hover:bg-slate-50 transition-all select-none text-slate-700 font-bold text-sm">
+                    <input 
+                      type="checkbox" 
+                      checked={showSafetyCost} 
+                      onChange={(e) => setShowSafetyCost(e.target.checked)}
+                      className="accent-indigo-600 w-4 h-4"
+                    />
+                    <span>안전시설비(재료비) 포함</span>
+                 </label>
+            </div>
+
+            <div className="bg-white shadow-2xl min-h-[29.7cm] max-w-[21cm] mx-auto print:shadow-none print:w-full print:max-w-none animate-in zoom-in-95 duration-300 origin-top rounded-sm">
              {/* Report Mode View - Designed to look like paper */}
              <div className="p-[10mm] md:p-[15mm] h-full flex flex-col">
                 <div className="border-2 border-slate-900 p-1 flex-1">
@@ -556,12 +639,14 @@ function App() {
                       readOnly 
                     />
                     
-                    {/* 2. Safety Facility Material Cost Evidence */}
-                    <SafetyCostTable 
-                      items={safetyItems}
-                      setItems={setSafetyItems}
-                      readOnly
-                    />
+                    {/* 2. Safety Facility Material Cost Evidence - Conditional */}
+                    {showSafetyCost && (
+                        <SafetyCostTable 
+                        items={safetyItems}
+                        setItems={setSafetyItems}
+                        readOnly
+                        />
+                    )}
 
                     {/* 3. Photo Evidence */}
                     <PhotoLedger photos={photos} setPhotos={setPhotos} readOnly />
@@ -580,10 +665,10 @@ function App() {
                                     src={projectInfo.managerSignature} 
                                     alt="signature" 
                                     style={{
-                                        transform: `rotate(${projectInfo.managerSignatureStyle?.rotation || 0}deg) translate(${projectInfo.managerSignatureStyle?.offsetX || 0}px, ${projectInfo.managerSignatureStyle?.offsetY || 0}px) scale(${projectInfo.managerSignatureStyle?.scale || 1})`,
+                                        transform: `rotate(${projectInfo.managerSignatureStyle?.rotation || 0}deg) translate(${projectInfo.managerSignatureStyle?.offsetX || 0}px, ${projectInfo.managerSignatureStyle?.offsetY || 0}px) scale(${projectInfo.managerSignatureStyle?.scale || 1.2})`,
                                         mixBlendMode: 'multiply'
                                     }}
-                                    className="absolute right-2 bottom-1 max-h-16 max-w-[120px] w-auto z-10 origin-center pointer-events-none"
+                                    className="absolute right-0 -bottom-4 h-20 w-auto z-10 origin-center pointer-events-none"
                                   />
                                 ) : (
                                   <span className="text-sm text-slate-600 font-serif z-0">(인)</span>
@@ -599,10 +684,10 @@ function App() {
                                     src={projectInfo.safetyManagerSignature} 
                                     alt="signature" 
                                     style={{
-                                        transform: `rotate(${projectInfo.safetyManagerSignatureStyle?.rotation || 0}deg) translate(${projectInfo.safetyManagerSignatureStyle?.offsetX || 0}px, ${projectInfo.safetyManagerSignatureStyle?.offsetY || 0}px) scale(${projectInfo.safetyManagerSignatureStyle?.scale || 1})`,
+                                        transform: `rotate(${projectInfo.safetyManagerSignatureStyle?.rotation || 0}deg) translate(${projectInfo.safetyManagerSignatureStyle?.offsetX || 0}px, ${projectInfo.safetyManagerSignatureStyle?.offsetY || 0}px) scale(${projectInfo.safetyManagerSignatureStyle?.scale || 1.2})`,
                                         mixBlendMode: 'multiply'
                                     }}
-                                    className="absolute right-2 bottom-1 max-h-16 max-w-[120px] w-auto z-10 origin-center pointer-events-none"
+                                    className="absolute right-0 -bottom-4 h-20 w-auto z-10 origin-center pointer-events-none"
                                   />
                                 ) : (
                                   <span className="text-sm text-slate-600 font-serif z-0">(인)</span>
@@ -615,6 +700,7 @@ function App() {
                   </div>
                 </div>
              </div>
+          </div>
           </div>
         )}
 

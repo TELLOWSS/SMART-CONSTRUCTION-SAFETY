@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Worker, PhotoEvidence, DailyAttendance, PHOTO_CATEGORIES } from '../types';
 import { Calendar, ChevronLeft, ChevronRight, CheckCircle2, Circle, Camera, Plus, MapPin, ImagePlus, Edit3, User, Clock, Loader2 } from 'lucide-react';
 
@@ -9,21 +9,39 @@ interface Props {
   setAttendance: React.Dispatch<React.SetStateAction<DailyAttendance>>;
   photos: PhotoEvidence[];
   setPhotos: React.Dispatch<React.SetStateAction<PhotoEvidence[]>>;
+  year: number;
+  month: number;
 }
 
-export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAttendance, photos, setPhotos }) => {
+export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAttendance, photos, setPhotos, year, month }) => {
   // Use local date string instead of UTC to fix timezone issues
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const now = new Date();
+    // Default to current date initially
     const localDate = new Date(now.getTime() - (now.getTimezoneOffset() * 60000));
     return localDate.toISOString().split('T')[0];
   });
   
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Sync selectedDate with global project month when it changes
+  useEffect(() => {
+    const currentSelected = new Date(selectedDate);
+    // Note: getMonth() is 0-indexed, month prop is 1-indexed
+    if (currentSelected.getFullYear() !== year || (currentSelected.getMonth() + 1) !== month) {
+        // Default to the 1st day of the new report month
+        const newDate = `${year}-${String(month).padStart(2, '0')}-01`;
+        setSelectedDate(newDate);
+    }
+  }, [year, month]);
+
   const changeDate = (days: number) => {
     const date = new Date(selectedDate);
     date.setDate(date.getDate() + days);
+    
+    // Optional: You could restrict navigation to within the selected month here
+    // For now, we allow navigating freely, but users should know report filters by month
+    
     setSelectedDate(date.toISOString().split('T')[0]);
   };
 
@@ -151,6 +169,12 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
               className="absolute inset-0 opacity-0 cursor-pointer"
             />
           </div>
+          {/* Visual indicator if date doesn't match report month */}
+          {new Date(selectedDate).getMonth() + 1 !== month && (
+              <span className="text-[10px] text-amber-500 font-bold mt-1 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">
+                  주의: 보고서 월({month}월)과 다름
+              </span>
+          )}
         </div>
         <button 
           onClick={() => changeDate(1)} 
