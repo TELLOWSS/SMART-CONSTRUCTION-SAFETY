@@ -22,6 +22,7 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
     return localDate.toISOString().split('T')[0];
   });
   
+  const [showCalendar, setShowCalendar] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Sync selectedDate with global project month when it changes
@@ -43,6 +44,69 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
     // For now, we allow navigating freely, but users should know report filters by month
     
     setSelectedDate(date.toISOString().split('T')[0]);
+  };
+
+  // 캘린더 관련 헬퍼 함수
+  const getDaysInMonth = (dateStr: string) => {
+    const [y, m] = dateStr.split('-').map(Number);
+    return new Date(y, m, 0).getDate();
+  };
+
+  const getFirstDayOfMonth = (dateStr: string) => {
+    const [y, m] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, 1).getDay();
+  };
+
+  const getCurrentMonthYear = () => {
+    const [y, m] = selectedDate.split('-').map(Number);
+    return { year: y, month: m };
+  };
+
+  const changeMonth = (delta: number) => {
+    const [y, m] = selectedDate.split('-').map(Number);
+    let newMonth = m + delta;
+    let newYear = y;
+    
+    if (newMonth > 12) {
+      newMonth = 1;
+      newYear += 1;
+    } else if (newMonth < 1) {
+      newMonth = 12;
+      newYear -= 1;
+    }
+    
+    const daysInNewMonth = new Date(newYear, newMonth, 0).getDate();
+    const currentDay = parseInt(selectedDate.split('-')[2]);
+    const newDay = Math.min(currentDay, daysInNewMonth);
+    
+    const newDate = `${newYear}-${String(newMonth).padStart(2, '0')}-${String(newDay).padStart(2, '0')}`;
+    setSelectedDate(newDate);
+  };
+
+  const setToday = () => {
+    const now = new Date();
+    const localDate = new Date(now.getTime() - (now.getTimezoneOffset() * 60000));
+    setSelectedDate(localDate.toISOString().split('T')[0]);
+  };
+
+  const renderCalendar = () => {
+    const [y, m] = selectedDate.split('-').map(Number);
+    const daysInMonth = getDaysInMonth(selectedDate);
+    const firstDayOfMonth = getFirstDayOfMonth(selectedDate);
+    const days = [];
+
+    // 빈 셀 추가
+    for (let i = 0; i < firstDayOfMonth; i++) {
+      days.push(null);
+    }
+
+    // 날짜 추가
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+      days.push(dateStr);
+    }
+
+    return days;
   };
 
   const updateAttendance = (workerId: string, value: number) => {
@@ -165,38 +229,122 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Date Navigator Widget */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center sticky top-20 z-20 mx-auto max-w-md transition-all hover:shadow-md">
-        <button 
-          onClick={() => changeDate(-1)} 
-          className="p-3 hover:bg-slate-100 rounded-xl text-slate-500 transition-colors active:scale-95"
-        >
-          <ChevronLeft className="w-6 h-6" />
-        </button>
-        <div className="flex flex-col items-center mx-6 min-w-[160px]">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">DATE SELECTOR</span>
-          <div className="flex items-center gap-2 relative group cursor-pointer">
-             <Calendar className="w-5 h-5 text-indigo-600" />
-             <span className="text-2xl font-bold text-slate-800 tracking-tight">{selectedDate}</span>
-             <input 
-              type="date" 
-              value={selectedDate} 
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="absolute inset-0 opacity-0 cursor-pointer"
-            />
+      <div className="bg-white p-6 rounded-2xl shadow-md border border-slate-200 max-w-2xl mx-auto transition-all hover:shadow-lg">
+        {/* Header with current date and quick buttons */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <Calendar className="w-6 h-6 text-indigo-600" />
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">선택된 날짜</span>
+              <span className="text-2xl font-bold text-slate-800">{selectedDate}</span>
+            </div>
           </div>
-          {/* Visual indicator if date doesn't match report month */}
-          {new Date(selectedDate).getMonth() + 1 !== month && (
-              <span className="text-[10px] text-amber-500 font-bold mt-1 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">
-                  주의: 보고서 월({month}월)과 다름
-              </span>
-          )}
+          
+          <div className="flex gap-2 flex-wrap justify-center">
+            <button 
+              onClick={setToday}
+              className="px-3 py-1.5 text-xs font-bold bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors"
+            >
+              오늘
+            </button>
+            <button 
+              onClick={() => changeDate(-1)}
+              className="px-3 py-1.5 text-xs font-bold bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
+            >
+              이전일
+            </button>
+            <button 
+              onClick={() => changeDate(1)}
+              className="px-3 py-1.5 text-xs font-bold bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
+            >
+              다음일
+            </button>
+            <button 
+              onClick={() => setShowCalendar(!showCalendar)}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${showCalendar ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+            >
+              📅 달력
+            </button>
+          </div>
         </div>
-        <button 
-          onClick={() => changeDate(1)} 
-          className="p-3 hover:bg-slate-100 rounded-xl text-slate-500 transition-colors active:scale-95"
-        >
-          <ChevronRight className="w-6 h-6" />
-        </button>
+
+        {/* Calendar View */}
+        {showCalendar && (
+          <div className="border-t border-slate-100 pt-4 animate-in slide-in-from-top-2">
+            {/* Month Navigation */}
+            <div className="flex items-center justify-between mb-4">
+              <button
+                onClick={() => changeMonth(-1)}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <ChevronLeft className="w-5 h-5 text-slate-600" />
+              </button>
+              
+              <div className="text-center">
+                <span className="text-lg font-bold text-slate-800">
+                  {new Date(selectedDate).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' })}
+                </span>
+              </div>
+              
+              <button
+                onClick={() => changeMonth(1)}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <ChevronRight className="w-5 h-5 text-slate-600" />
+              </button>
+            </div>
+
+            {/* Day Headers */}
+            <div className="grid grid-cols-7 gap-2 mb-3">
+              {['일', '월', '화', '수', '목', '금', '토'].map(day => (
+                <div key={day} className="text-center text-xs font-bold text-slate-500 py-2">
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            {/* Calendar Days */}
+            <div className="grid grid-cols-7 gap-2">
+              {renderCalendar().map((date, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    if (date) setSelectedDate(date);
+                  }}
+                  disabled={!date}
+                  className={`py-3 rounded-lg text-xs font-bold transition-all ${
+                    !date
+                      ? 'bg-slate-50 cursor-not-allowed'
+                      : date === selectedDate
+                      ? 'bg-indigo-600 text-white shadow-md scale-105'
+                      : 'bg-slate-50 text-slate-700 hover:bg-indigo-100 hover:text-indigo-700 cursor-pointer'
+                  }`}
+                >
+                  {date ? parseInt(date.split('-')[2]) : ''}
+                </button>
+              ))}
+            </div>
+
+            {/* Month Warning */}
+            {new Date(selectedDate).getMonth() + 1 !== month && (
+              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700 font-medium flex items-center gap-2">
+                <span>⚠️</span>
+                <span>주의: 선택한 날짜({new Date(selectedDate).getMonth() + 1}월)가 보고서 월({month}월)과 다릅니다.</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Direct Date Input */}
+        <div className="mt-4 pt-4 border-t border-slate-100">
+          <label className="block text-xs font-bold text-slate-500 mb-2">직접 입력</label>
+          <input 
+            type="date" 
+            value={selectedDate} 
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

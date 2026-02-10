@@ -811,6 +811,8 @@ function App() {
             setAttendance={setAttendance}
             photos={photos}
             setPhotos={setPhotos}
+            year={projectInfo.year}
+            month={projectInfo.month}
           />
         )}
 
