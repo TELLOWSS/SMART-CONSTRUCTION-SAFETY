@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Worker, PhotoEvidence, DailyAttendance, PHOTO_CATEGORIES } from '../types';
-import { Calendar, ChevronLeft, ChevronRight, CheckCircle2, Circle, Camera, Plus, MapPin, ImagePlus, Edit3, User, Clock, Loader2 } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, CheckCircle2, Circle, Camera, Plus, MapPin, ImagePlus, Edit3, User, Clock, Loader2, EyeOff, Eye } from 'lucide-react';
 
 interface Props {
   workers: Worker[];
@@ -24,6 +24,7 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
   
   const [showCalendar, setShowCalendar] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [hideZeroAttendance, setHideZeroAttendance] = useState(false);
 
   // Sync selectedDate with global project month when it changes
   useEffect(() => {
@@ -117,6 +118,14 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
       return { ...prev, [selectedDate]: updatedDay };
     });
   };
+
+  // Filter workers based on hideZeroAttendance toggle
+  const filteredWorkers = hideZeroAttendance
+    ? workers.filter(worker => {
+        const currentGongsu = attendance[selectedDate]?.[worker.id] || 0;
+        return currentGongsu > 0;
+      })
+    : workers;
 
   const todaysPhotos = photos.filter(p => p.date === selectedDate);
   
@@ -350,12 +359,26 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Left: Labor Input */}
         <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 h-fit">
-          <h3 className="text-xl font-bold mb-6 flex items-center gap-3 text-slate-800">
-            <div className="bg-emerald-100 p-2 rounded-xl text-emerald-600">
-              <CheckCircle2 className="w-5 h-5" />
-            </div>
-            금일 투입 인력 체크
-          </h3>
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-bold flex items-center gap-3 text-slate-800">
+              <div className="bg-emerald-100 p-2 rounded-xl text-emerald-600">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              금일 투입 인력 체크
+            </h3>
+            <button
+              onClick={() => setHideZeroAttendance(!hideZeroAttendance)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                hideZeroAttendance
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+              title={hideZeroAttendance ? '모든 근로자 보기' : '출역 인원만 보기'}
+            >
+              {hideZeroAttendance ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+              {hideZeroAttendance ? '전체보기' : '출역만'}
+            </button>
+          </div>
           
           <div className="space-y-4">
             {workers.length === 0 ? (
@@ -364,8 +387,14 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
                  <p className="font-medium text-sm">등록된 근로자가 없습니다.</p>
                  <p className="text-xs mt-1">'기본 설정' 탭에서 먼저 등록해주세요.</p>
                </div>
+            ) : filteredWorkers.length === 0 ? (
+               <div className="flex flex-col items-center justify-center py-12 text-slate-400 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                 <EyeOff className="w-10 h-10 opacity-30 mb-2"/>
+                 <p className="font-medium text-sm">금일 출역 인원이 없습니다.</p>
+                 <p className="text-xs mt-1">'전체보기' 버튼을 눌러 모든 근로자를 확인하세요.</p>
+               </div>
             ) : (
-              workers.map(worker => {
+              filteredWorkers.map(worker => {
                 const currentGongsu = attendance[selectedDate]?.[worker.id] || 0;
                 
                 return (

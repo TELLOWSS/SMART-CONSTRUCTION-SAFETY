@@ -60,6 +60,18 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
   };
 
   if (readOnly) {
+    // Filter workers to show only those with attendance in the report month
+    const workersWithAttendance = workers.filter(worker => {
+      // Check if worker has any attendance in this month using Array.some() for better readability
+      return daysArray.some(day => {
+        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const value = attendance[dateStr]?.[worker.id];
+        return value && value > 0;
+      });
+    });
+
+    const hiddenWorkersCount = workers.length - workersWithAttendance.length;
+
     return (
       <div className="mb-8 break-inside-avoid">
         <h3 className="text-lg font-bold mb-3 flex items-center gap-2 text-slate-800">
@@ -67,8 +79,15 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
           1. 안전시설 인건비 제출 증빙 양식
         </h3>
         
+        {hiddenWorkersCount > 0 && (
+          <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700 flex items-center gap-2">
+            <span>ℹ️</span>
+            <span>출역 기록이 없는 근로자 {hiddenWorkersCount}명은 보고서에서 제외되었습니다.</span>
+          </div>
+        )}
+        
         <div className="space-y-4">
-          {workers.map((worker, index) => {
+          {workersWithAttendance.map((worker, index) => {
              const totalPay = worker.daysWorked * worker.dailyRate;
              const netPay = totalPay; 
 
@@ -126,7 +145,7 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
             );
           })}
           
-          {workers.length === 0 && (
+          {workersWithAttendance.length === 0 && (
              <div className="border border-slate-400 p-8 text-center text-slate-400 italic bg-slate-50">
                등록된 근로자 내역이 없습니다.
              </div>
