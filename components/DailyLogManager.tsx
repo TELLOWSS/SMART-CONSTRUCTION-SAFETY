@@ -375,8 +375,8 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
               }`}
               title={hideZeroAttendance ? '모든 근로자 보기' : '출역 인원만 보기'}
             >
-              {hideZeroAttendance ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-              {hideZeroAttendance ? '전체보기' : '출역만'}
+              {hideZeroAttendance ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+              {hideZeroAttendance ? '출역만' : '전체보기'}
             </button>
           </div>
           

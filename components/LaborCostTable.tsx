@@ -62,15 +62,12 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
   if (readOnly) {
     // Filter workers to show only those with attendance in the report month
     const workersWithAttendance = workers.filter(worker => {
-      // Check if worker has any attendance in this month
-      for (let day = 1; day <= daysInMonth; day++) {
+      // Check if worker has any attendance in this month using Array.some() for better readability
+      return daysArray.some(day => {
         const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         const value = attendance[dateStr]?.[worker.id];
-        if (value && value > 0) {
-          return true;
-        }
-      }
-      return false;
+        return value && value > 0;
+      });
     });
 
     const hiddenWorkersCount = workers.length - workersWithAttendance.length;
