@@ -182,33 +182,64 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
     if (e.target.files && e.target.files.length > 0) {
       setIsProcessing(true);
       try {
-        const file = e.target.files[0];
-        
-        // Validate file type
-        if (!file.type.startsWith('image/')) {
-          alert('이미지 파일만 업로드 가능합니다. (JPEG, PNG, WebP, GIF)');
-          return;
-        }
-
-        // Validate file size (max 20MB for original)
+        const files = Array.from(e.target.files);
         const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
-        if (file.size > MAX_FILE_SIZE) {
-          alert(`파일 크기가 너무 큽니다. (최대 20MB)\n현재 크기: ${(file.size / 1024 / 1024).toFixed(1)}MB`);
-          return;
-        }
-
-        // Compress image before storing
-        const compressedBlob = await compressImage(file);
+        const validationErrors: string[] = [];
+        const compressionErrors: string[] = [];
         
-        const newPhoto: PhotoEvidence = {
-          id: crypto.randomUUID(),
-          fileUrl: URL.createObjectURL(compressedBlob),
-          category: PHOTO_CATEGORIES[0],
-          description: '',
-          location: '',
-          date: selectedDate,
-        };
-        setPhotos([...photos, newPhoto]);
+        // Validate all files first
+        const validFiles = files.filter(file => {
+          if (!file.type.startsWith('image/')) {
+            validationErrors.push(`"${file.name}"는 이미지 파일이 아닙니다.`);
+            return false;
+          }
+          if (file.size > MAX_FILE_SIZE) {
+            validationErrors.push(`"${file.name}" 파일 크기가 너무 큽니다. (최대 20MB, 현재: ${(file.size / 1024 / 1024).toFixed(1)}MB)`);
+            return false;
+          }
+          return true;
+        });
+
+        // Process files in batches to avoid overwhelming the system
+        const BATCH_SIZE = 5;
+        const newPhotos: PhotoEvidence[] = [];
+        
+        for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
+          const batch = validFiles.slice(i, i + BATCH_SIZE);
+          const compressionPromises = batch.map(file => 
+            compressImage(file)
+              .then(blob => ({ success: true as const, blob, file }))
+              .catch(error => ({ success: false as const, error, file }))
+          );
+          const results = await Promise.all(compressionPromises);
+          
+          // Process successful compressions and log failures
+          results.forEach(result => {
+            if (result.success) {
+              newPhotos.push({
+                id: crypto.randomUUID(),
+                fileUrl: URL.createObjectURL(result.blob),
+                category: PHOTO_CATEGORIES[0],
+                description: '',
+                location: '',
+                date: selectedDate,
+              });
+            } else {
+              console.error(`Failed to compress ${result.file.name}:`, result.error);
+              compressionErrors.push(`"${result.file.name}" 압축 실패: ${result.error instanceof Error ? result.error.message : '알 수 없는 오류'}`);
+            }
+          });
+        }
+        
+        // Show all errors together if any occurred
+        const allErrors = [...validationErrors, ...compressionErrors];
+        if (allErrors.length > 0) {
+          alert(`다음 파일들을 처리할 수 없습니다:\n\n${allErrors.join('\n')}`);
+        }
+        
+        if (newPhotos.length > 0) {
+          setPhotos([...photos, ...newPhotos]);
+        }
       } catch (error) {
         console.error("Photo upload failed:", error);
         const errorMsg = error instanceof Error ? error.message : '알 수 없는 오류';
@@ -442,7 +473,7 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
             <label className={`cursor-pointer flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 ${isProcessing ? 'opacity-70 cursor-wait' : ''}`}>
               {isProcessing ? <Loader2 className="w-3 h-3 animate-spin"/> : <Plus className="w-3 h-3" />}
               {isProcessing ? '처리중...' : '사진 추가'}
-              <input type="file" className="hidden" accept="image/*" onChange={handlePhotoUpload} disabled={isProcessing} />
+              <input type="file" className="hidden" accept="image/*" onChange={handlePhotoUpload} disabled={isProcessing} multiple />
             </label>
            </div>
 
