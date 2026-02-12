@@ -67,34 +67,39 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
       try {
         const files = Array.from(e.target.files);
         const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
-        const newPhotos: PhotoEvidence[] = [];
+        const validationErrors: string[] = [];
         
-        // Process all files
-        for (const file of files) {
-          // Validate file type
+        // Validate all files first
+        const validFiles = files.filter(file => {
           if (!file.type.startsWith('image/')) {
-            alert(`"${file.name}"는 이미지 파일이 아닙니다. 건너뜁니다.`);
-            continue;
+            validationErrors.push(`"${file.name}"는 이미지 파일이 아닙니다.`);
+            return false;
           }
-
-          // Validate file size
           if (file.size > MAX_FILE_SIZE) {
-            alert(`"${file.name}" 파일 크기가 너무 큽니다. (최대 20MB)\n현재 크기: ${(file.size / 1024 / 1024).toFixed(1)}MB\n건너뜁니다.`);
-            continue;
+            validationErrors.push(`"${file.name}" 파일 크기가 너무 큽니다. (최대 20MB, 현재: ${(file.size / 1024 / 1024).toFixed(1)}MB)`);
+            return false;
           }
+          return true;
+        });
 
-          const compressedBlob = await compressImage(file);
-
-          const newPhoto: PhotoEvidence = {
-            id: crypto.randomUUID(),
-            fileUrl: URL.createObjectURL(compressedBlob),
-            category: PHOTO_CATEGORIES[0],
-            description: '',
-            location: '',
-            date: new Date().toISOString().split('T')[0],
-          };
-          newPhotos.push(newPhoto);
+        // Show validation errors if any
+        if (validationErrors.length > 0) {
+          alert(`다음 파일들을 건너뜁니다:\n\n${validationErrors.join('\n')}`);
         }
+
+        // Compress all valid files in parallel
+        const compressionPromises = validFiles.map(file => compressImage(file));
+        const compressedBlobs = await Promise.all(compressionPromises);
+
+        // Create photo objects
+        const newPhotos: PhotoEvidence[] = compressedBlobs.map(blob => ({
+          id: crypto.randomUUID(),
+          fileUrl: URL.createObjectURL(blob),
+          category: PHOTO_CATEGORIES[0],
+          description: '',
+          location: '',
+          date: new Date().toISOString().split('T')[0],
+        }));
         
         if (newPhotos.length > 0) {
           setPhotos([...photos, ...newPhotos]);
