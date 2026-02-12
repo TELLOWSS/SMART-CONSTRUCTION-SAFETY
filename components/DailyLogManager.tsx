@@ -210,20 +210,37 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
         
         for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
           const batch = validFiles.slice(i, i + BATCH_SIZE);
-          const compressionPromises = batch.map(file => compressImage(file));
-          const compressedBlobs = await Promise.all(compressionPromises);
+          const compressionPromises = batch.map(file => 
+            compressImage(file)
+              .then(blob => ({ success: true as const, blob, file }))
+              .catch(error => ({ success: false as const, error, file }))
+          );
+          const results = await Promise.all(compressionPromises);
           
-          // Create photo objects for this batch
-          const batchPhotos: PhotoEvidence[] = compressedBlobs.map(blob => ({
-            id: crypto.randomUUID(),
-            fileUrl: URL.createObjectURL(blob),
-            category: PHOTO_CATEGORIES[0],
-            description: '',
-            location: '',
-            date: selectedDate,
-          }));
-          
-          newPhotos.push(...batchPhotos);
+          // Process successful compressions and log failures
+          results.forEach(result => {
+            if (result.success) {
+              newPhotos.push({
+                id: crypto.randomUUID(),
+                fileUrl: URL.createObjectURL(result.blob),
+                category: PHOTO_CATEGORIES[0],
+                description: '',
+                location: '',
+                date: selectedDate,
+              });
+            } else {
+              console.error(`Failed to compress ${result.file.name}:`, result.error);
+              validationErrors.push(`"${result.file.name}" 압축 실패: ${result.error instanceof Error ? result.error.message : '알 수 없는 오류'}`);
+            }
+          });
+        }
+        
+        // Show compression errors if any occurred
+        if (validationErrors.length > validFiles.length - newPhotos.length) {
+          const compressionErrors = validationErrors.slice(validFiles.length - newPhotos.length);
+          if (compressionErrors.length > 0) {
+            alert(`다음 파일들의 압축에 실패했습니다:\n\n${compressionErrors.join('\n')}`);
+          }
         }
         
         if (newPhotos.length > 0) {
