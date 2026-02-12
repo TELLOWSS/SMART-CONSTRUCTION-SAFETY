@@ -867,60 +867,58 @@ function App() {
                     {/* 3. Photo Evidence */}
                     <PhotoLedger photos={photos} setPhotos={setPhotos} readOnly />
                     
-                    <div className="mt-16 text-center pt-8 print:mt-12 break-inside-avoid">
-                      <p className="text-xl font-bold mb-12 tracking-wider font-serif">위와 같이 산업안전보건관리비(인건비 및 안전시설비) 사용내역을 청구합니다.</p>
-                      <div className="flex flex-col items-end pr-8 gap-4">
-                         <p className="text-lg font-serif font-bold">{formatDateToKorean(projectInfo.reportDate)}</p>
-                         <div className="text-right mt-8 space-y-6">
+                    <div className="mt-12 text-center pt-6 print:mt-8 break-inside-avoid">
+                      <p className="text-xl font-bold mb-8 tracking-wider font-serif">위와 같이 산업안전보건관리비(인건비 및 안전시설비) 사용내역을 청구합니다.</p>
+                      <div className="flex flex-col items-end pr-8 gap-3">
+                         <p className="text-lg font-serif font-bold mb-4">{formatDateToKorean(projectInfo.reportDate)}</p>
+                         <div className="text-right space-y-3">
                            {/* Manager Signature */}
-                           <div className="flex items-start justify-end gap-6">
-                              <span className="font-bold text-lg font-serif pt-1">청 구 인 (현장소장) :</span>
-                              <div className="flex flex-col items-center h-24">
-                                <div className="relative w-56 h-20 flex items-end justify-start gap-4 px-2 border-b-2 border-slate-900">
-                                  <span className="text-lg font-serif text-slate-900 leading-none pb-1 whitespace-nowrap">{projectInfo.managerName}</span>
+                           <div className="flex items-center justify-end gap-4">
+                              <span className="font-bold text-lg font-serif">청 구 인 (현장소장) :</span>
+                              <div className="relative w-48 h-16 flex items-center justify-start border-b-2 border-slate-900">
+                                <span className="text-lg font-serif text-slate-900 ml-2 mr-auto">{projectInfo.managerName}</span>
+                                <div className="absolute right-2 flex items-center">
+                                  <span className="text-xs text-slate-400 font-serif mr-1">(인)</span>
                                   {projectInfo.managerSignature && (
                                     <img 
                                       src={projectInfo.managerSignature} 
                                       alt="manager_signature" 
                                       style={{
-                                          transform: `rotate(${projectInfo.managerSignatureStyle?.rotation || 0}deg) translate(${projectInfo.managerSignatureStyle?.offsetX || 0}px, ${projectInfo.managerSignatureStyle?.offsetY || 0}px) scale(${projectInfo.managerSignatureStyle?.scale || 1.0})`,
+                                          position: 'absolute',
+                                          right: '-10px',
+                                          top: '50%',
+                                          transform: `translateY(-50%) rotate(${projectInfo.managerSignatureStyle?.rotation || 0}deg) translate(${projectInfo.managerSignatureStyle?.offsetX || 0}px, ${projectInfo.managerSignatureStyle?.offsetY || 0}px) scale(${projectInfo.managerSignatureStyle?.scale || 1.0})`,
                                           mixBlendMode: 'darken'
                                       }}
-                                      className="h-16 w-auto origin-center pointer-events-none"
+                                      className="h-14 w-auto origin-center pointer-events-none"
                                     />
                                   )}
                                 </div>
-                                {!projectInfo.managerSignature && (
-                                  <div className="w-56 flex items-center justify-end px-2 -mt-8">
-                                    <span className="text-sm text-slate-500 font-serif">(서명)</span>
-                                  </div>
-                                )}
                               </div>
                            </div>
 
                            {/* Safety Manager Signature */}
-                           <div className="flex items-start justify-end gap-6">
-                              <span className="font-bold text-lg font-serif pt-1">확 인 자 (안전팀장) :</span>
-                              <div className="flex flex-col items-center h-24">
-                                <div className="relative w-56 h-20 flex items-end justify-start gap-4 px-2 border-b-2 border-slate-900">
-                                  <span className="text-lg font-serif text-slate-900 leading-none pb-1 whitespace-nowrap">{projectInfo.safetyManagerName}</span>
+                           <div className="flex items-center justify-end gap-4">
+                              <span className="font-bold text-lg font-serif">확 인 자 (안전팀장) :</span>
+                              <div className="relative w-48 h-16 flex items-center justify-start border-b-2 border-slate-900">
+                                <span className="text-lg font-serif text-slate-900 ml-2 mr-auto">{projectInfo.safetyManagerName}</span>
+                                <div className="absolute right-2 flex items-center">
+                                  <span className="text-xs text-slate-400 font-serif mr-1">(인)</span>
                                   {projectInfo.safetyManagerSignature && (
                                     <img 
                                       src={projectInfo.safetyManagerSignature} 
                                       alt="safety_signature" 
                                       style={{
-                                          transform: `rotate(${projectInfo.safetyManagerSignatureStyle?.rotation || 0}deg) translate(${projectInfo.safetyManagerSignatureStyle?.offsetX || 0}px, ${projectInfo.safetyManagerSignatureStyle?.offsetY || 0}px) scale(${projectInfo.safetyManagerSignatureStyle?.scale || 1.0})`,
+                                          position: 'absolute',
+                                          right: '-10px',
+                                          top: '50%',
+                                          transform: `translateY(-50%) rotate(${projectInfo.safetyManagerSignatureStyle?.rotation || 0}deg) translate(${projectInfo.safetyManagerSignatureStyle?.offsetX || 0}px, ${projectInfo.safetyManagerSignatureStyle?.offsetY || 0}px) scale(${projectInfo.safetyManagerSignatureStyle?.scale || 1.0})`,
                                           mixBlendMode: 'darken'
                                       }}
-                                      className="h-16 w-auto origin-center pointer-events-none"
+                                      className="h-14 w-auto origin-center pointer-events-none"
                                     />
                                   )}
                                 </div>
-                                {!projectInfo.safetyManagerSignature && (
-                                  <div className="w-56 flex items-center justify-end px-2 -mt-8">
-                                    <span className="text-sm text-slate-500 font-serif">(서명)</span>
-                                  </div>
-                                )}
                               </div>
                            </div>
                          </div>

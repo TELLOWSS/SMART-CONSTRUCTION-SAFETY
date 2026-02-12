@@ -119,7 +119,7 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
     const sortedPhotos = [...photos].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     return (
-      <div className="break-before-page mt-8">
+      <div className="mt-8">
         <h3 className="text-lg font-bold mb-3 flex items-center gap-2 text-slate-800">
           <span className="w-1.5 h-6 bg-slate-800 inline-block rounded-sm"></span>
           3. 산업안전보건관리비 항목별 증빙 사진대지
