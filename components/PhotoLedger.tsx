@@ -68,6 +68,7 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
         const files = Array.from(e.target.files);
         const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
         const validationErrors: string[] = [];
+        const compressionErrors: string[] = [];
         
         // Validate all files first
         const validFiles = files.filter(file => {
@@ -81,11 +82,6 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
           }
           return true;
         });
-
-        // Show validation errors if any
-        if (validationErrors.length > 0) {
-          alert(`다음 파일들을 건너뜁니다:\n\n${validationErrors.join('\n')}`);
-        }
 
         // Process files in batches to avoid overwhelming the system
         const BATCH_SIZE = 5;
@@ -113,17 +109,15 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
               });
             } else {
               console.error(`Failed to compress ${result.file.name}:`, result.error);
-              validationErrors.push(`"${result.file.name}" 압축 실패: ${result.error instanceof Error ? result.error.message : '알 수 없는 오류'}`);
+              compressionErrors.push(`"${result.file.name}" 압축 실패: ${result.error instanceof Error ? result.error.message : '알 수 없는 오류'}`);
             }
           });
         }
         
-        // Show compression errors if any occurred
-        if (validationErrors.length > validFiles.length - newPhotos.length) {
-          const compressionErrors = validationErrors.slice(validFiles.length - newPhotos.length);
-          if (compressionErrors.length > 0) {
-            alert(`다음 파일들의 압축에 실패했습니다:\n\n${compressionErrors.join('\n')}`);
-          }
+        // Show all errors together if any occurred
+        const allErrors = [...validationErrors, ...compressionErrors];
+        if (allErrors.length > 0) {
+          alert(`다음 파일들을 처리할 수 없습니다:\n\n${allErrors.join('\n')}`);
         }
         
         if (newPhotos.length > 0) {
