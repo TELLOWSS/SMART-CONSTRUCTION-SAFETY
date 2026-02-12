@@ -204,19 +204,27 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
           alert(`다음 파일들을 건너뜁니다:\n\n${validationErrors.join('\n')}`);
         }
 
-        // Compress all valid files in parallel
-        const compressionPromises = validFiles.map(file => compressImage(file));
-        const compressedBlobs = await Promise.all(compressionPromises);
-
-        // Create photo objects
-        const newPhotos: PhotoEvidence[] = compressedBlobs.map(blob => ({
-          id: crypto.randomUUID(),
-          fileUrl: URL.createObjectURL(blob),
-          category: PHOTO_CATEGORIES[0],
-          description: '',
-          location: '',
-          date: selectedDate,
-        }));
+        // Process files in batches to avoid overwhelming the system
+        const BATCH_SIZE = 5;
+        const newPhotos: PhotoEvidence[] = [];
+        
+        for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
+          const batch = validFiles.slice(i, i + BATCH_SIZE);
+          const compressionPromises = batch.map(file => compressImage(file));
+          const compressedBlobs = await Promise.all(compressionPromises);
+          
+          // Create photo objects for this batch
+          const batchPhotos: PhotoEvidence[] = compressedBlobs.map(blob => ({
+            id: crypto.randomUUID(),
+            fileUrl: URL.createObjectURL(blob),
+            category: PHOTO_CATEGORIES[0],
+            description: '',
+            location: '',
+            date: selectedDate,
+          }));
+          
+          newPhotos.push(...batchPhotos);
+        }
         
         if (newPhotos.length > 0) {
           setPhotos([...photos, ...newPhotos]);
