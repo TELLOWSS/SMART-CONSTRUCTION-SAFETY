@@ -182,33 +182,41 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
     if (e.target.files && e.target.files.length > 0) {
       setIsProcessing(true);
       try {
-        const file = e.target.files[0];
-        
-        // Validate file type
-        if (!file.type.startsWith('image/')) {
-          alert('이미지 파일만 업로드 가능합니다. (JPEG, PNG, WebP, GIF)');
-          return;
-        }
-
-        // Validate file size (max 20MB for original)
+        const files = Array.from(e.target.files);
         const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
-        if (file.size > MAX_FILE_SIZE) {
-          alert(`파일 크기가 너무 큽니다. (최대 20MB)\n현재 크기: ${(file.size / 1024 / 1024).toFixed(1)}MB`);
-          return;
-        }
-
-        // Compress image before storing
-        const compressedBlob = await compressImage(file);
+        const newPhotos: PhotoEvidence[] = [];
         
-        const newPhoto: PhotoEvidence = {
-          id: crypto.randomUUID(),
-          fileUrl: URL.createObjectURL(compressedBlob),
-          category: PHOTO_CATEGORIES[0],
-          description: '',
-          location: '',
-          date: selectedDate,
-        };
-        setPhotos([...photos, newPhoto]);
+        // Process all files
+        for (const file of files) {
+          // Validate file type
+          if (!file.type.startsWith('image/')) {
+            alert(`"${file.name}"는 이미지 파일이 아닙니다. 건너뜁니다.`);
+            continue;
+          }
+
+          // Validate file size
+          if (file.size > MAX_FILE_SIZE) {
+            alert(`"${file.name}" 파일 크기가 너무 큽니다. (최대 20MB)\n현재 크기: ${(file.size / 1024 / 1024).toFixed(1)}MB\n건너뜁니다.`);
+            continue;
+          }
+
+          // Compress image before storing
+          const compressedBlob = await compressImage(file);
+          
+          const newPhoto: PhotoEvidence = {
+            id: crypto.randomUUID(),
+            fileUrl: URL.createObjectURL(compressedBlob),
+            category: PHOTO_CATEGORIES[0],
+            description: '',
+            location: '',
+            date: selectedDate,
+          };
+          newPhotos.push(newPhoto);
+        }
+        
+        if (newPhotos.length > 0) {
+          setPhotos([...photos, ...newPhotos]);
+        }
       } catch (error) {
         console.error("Photo upload failed:", error);
         const errorMsg = error instanceof Error ? error.message : '알 수 없는 오류';
@@ -442,7 +450,7 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
             <label className={`cursor-pointer flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 ${isProcessing ? 'opacity-70 cursor-wait' : ''}`}>
               {isProcessing ? <Loader2 className="w-3 h-3 animate-spin"/> : <Plus className="w-3 h-3" />}
               {isProcessing ? '처리중...' : '사진 추가'}
-              <input type="file" className="hidden" accept="image/*" onChange={handlePhotoUpload} disabled={isProcessing} />
+              <input type="file" className="hidden" accept="image/*" onChange={handlePhotoUpload} disabled={isProcessing} multiple />
             </label>
            </div>
 
