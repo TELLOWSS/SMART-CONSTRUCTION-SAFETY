@@ -876,8 +876,8 @@ function App() {
                            <div className="flex items-start justify-end gap-6">
                               <span className="font-bold text-lg font-serif pt-1">청 구 인 (현장소장) :</span>
                               <div className="flex flex-col items-center h-24">
-                                <div className="relative w-32 h-20 flex items-end justify-between px-2 border-b-2 border-slate-900">
-                                  <span className="text-lg font-serif text-slate-900 leading-none pb-1">{projectInfo.managerName}</span>
+                                <div className="relative w-56 h-20 flex items-end justify-start gap-4 px-2 border-b-2 border-slate-900">
+                                  <span className="text-lg font-serif text-slate-900 leading-none pb-1 whitespace-nowrap">{projectInfo.managerName}</span>
                                   {projectInfo.managerSignature && (
                                     <img 
                                       src={projectInfo.managerSignature} 
@@ -891,7 +891,7 @@ function App() {
                                   )}
                                 </div>
                                 {!projectInfo.managerSignature && (
-                                  <div className="w-32 flex items-center justify-end px-2 -mt-8">
+                                  <div className="w-56 flex items-center justify-end px-2 -mt-8">
                                     <span className="text-sm text-slate-500 font-serif">(서명)</span>
                                   </div>
                                 )}
@@ -902,8 +902,8 @@ function App() {
                            <div className="flex items-start justify-end gap-6">
                               <span className="font-bold text-lg font-serif pt-1">확 인 자 (안전팀장) :</span>
                               <div className="flex flex-col items-center h-24">
-                                <div className="relative w-32 h-20 flex items-end justify-between px-2 border-b-2 border-slate-900">
-                                  <span className="text-lg font-serif text-slate-900 leading-none pb-1">{projectInfo.safetyManagerName}</span>
+                                <div className="relative w-56 h-20 flex items-end justify-start gap-4 px-2 border-b-2 border-slate-900">
+                                  <span className="text-lg font-serif text-slate-900 leading-none pb-1 whitespace-nowrap">{projectInfo.safetyManagerName}</span>
                                   {projectInfo.safetyManagerSignature && (
                                     <img 
                                       src={projectInfo.safetyManagerSignature} 
@@ -917,7 +917,7 @@ function App() {
                                   )}
                                 </div>
                                 {!projectInfo.safetyManagerSignature && (
-                                  <div className="w-32 flex items-center justify-end px-2 -mt-8">
+                                  <div className="w-56 flex items-center justify-end px-2 -mt-8">
                                     <span className="text-sm text-slate-500 font-serif">(서명)</span>
                                   </div>
                                 )}
