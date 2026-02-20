@@ -824,7 +824,7 @@ function App() {
         {/* Report Preview Tab */}
         {activeTab === 'preview' && (
           <div className="flex flex-col items-center w-full">
-            {/* Print Options Toolbar - New addition */}
+            {/* Print Options Toolbar */}
             <div className="w-full max-w-[21cm] mb-4 flex justify-end gap-3 no-print animate-in fade-in slide-in-from-top-2">
                  <label className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200 cursor-pointer hover:bg-slate-50 transition-all select-none text-slate-700 font-bold text-sm">
                     <input 
@@ -837,8 +837,8 @@ function App() {
                  </label>
             </div>
 
-            <div className="bg-white shadow-2xl min-h-[29.7cm] max-w-[21cm] mx-auto print:shadow-none print:w-full print:max-w-none animate-in zoom-in-95 duration-300 origin-top rounded-sm">
-             {/* Report Mode View - Designed to look like paper */}
+            {/* ===== 갑지 (Front Sheet – Page 1) ===== */}
+            <div className="bg-white shadow-2xl min-h-[29.7cm] max-w-[21cm] w-full mx-auto print:shadow-none print:max-w-none animate-in zoom-in-95 duration-300 origin-top rounded-sm print:break-after-page">
              <div className="p-[10mm] md:p-[15mm] h-full flex flex-col">
                 <div className="border-2 border-slate-900 p-1 flex-1">
                   <div className="border border-slate-600 h-full p-8 relative">
@@ -855,18 +855,7 @@ function App() {
                       readOnly 
                     />
                     
-                    {/* 2. Safety Facility Material Cost Evidence - Conditional */}
-                    {showSafetyCost && (
-                        <SafetyCostTable 
-                        items={safetyItems}
-                        setItems={setSafetyItems}
-                        readOnly
-                        />
-                    )}
-
-                    {/* 3. Photo Evidence */}
-                    <PhotoLedger photos={photos} setPhotos={setPhotos} readOnly />
-                    
+                    {/* Signature Section – ends the 갑지 */}
                     <div className="mt-12 text-center pt-6 print:mt-8 break-inside-avoid">
                       <p className="text-xl font-bold mb-8 tracking-wider font-serif">위와 같이 산업안전보건관리비(인건비 및 안전시설비) 사용내역을 청구합니다.</p>
                       <div className="flex flex-col items-end pr-8 gap-3">
@@ -927,7 +916,43 @@ function App() {
                   </div>
                 </div>
              </div>
-          </div>
+            </div>
+
+            {/* ===== 첨부 1: 재료비 내역 (Attachment 1) ===== */}
+            {showSafetyCost && (
+              <div className="bg-white shadow-2xl max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm print:break-after-page">
+                <div className="p-[10mm] md:p-[15mm]">
+                  <div className="border-2 border-slate-900 p-1">
+                    <div className="border border-slate-600 p-8">
+                      <div className="border-b-2 border-slate-900 pb-3 mb-6 text-center break-inside-avoid">
+                        <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 첨 부 1 】</p>
+                        <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {projectInfo.year}년 {projectInfo.month}월</p>
+                      </div>
+                      <SafetyCostTable 
+                        items={safetyItems}
+                        setItems={setSafetyItems}
+                        readOnly
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ===== 첨부 2 (또는 첨부 1): 항목별 증빙사진대지 (Attachment) ===== */}
+            <div className="bg-white shadow-2xl max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm">
+              <div className="p-[10mm] md:p-[15mm]">
+                <div className="border-2 border-slate-900 p-1">
+                  <div className="border border-slate-600 p-8">
+                    <div className="border-b-2 border-slate-900 pb-3 mb-6 text-center break-inside-avoid">
+                      <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 첨 부 {showSafetyCost ? '2' : '1'} 】</p>
+                      <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {projectInfo.year}년 {projectInfo.month}월</p>
+                    </div>
+                    <PhotoLedger photos={photos} setPhotos={setPhotos} readOnly />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
