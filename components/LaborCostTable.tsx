@@ -14,9 +14,10 @@ interface Props {
   reportTitle?: string;  // ReadOnly mode heading
   onMoveWorker?: (workerId: string) => void; // Transfer worker to other section
   moveLabel?: string; // Label for move button e.g. "→ 안전시설로" or "← 유도원으로"
+  onDeleteWorker?: (workerId: string) => void; // Override delete to allow attendance cleanup
 }
 
-export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendance = {}, year = new Date().getFullYear(), month = new Date().getMonth() + 1, readOnly = false, sectionTitle = '유도원 및 감시자 인건비 산출 정보', reportTitle = '1. 유도원 및 감시자 인건비 제출 증빙 양식', onMoveWorker, moveLabel = '→ 이동' }) => {
+export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendance = {}, year = new Date().getFullYear(), month = new Date().getMonth() + 1, readOnly = false, sectionTitle = '유도원 및 감시자 인건비 산출 정보', reportTitle = '1. 유도원 및 감시자 인건비 제출 증빙 양식', onMoveWorker, moveLabel = '→ 이동', onDeleteWorker }) => {
   // For expanding detailed input in edit mode
   const [expandedWorkerId, setExpandedWorkerId] = useState<string | null>(null);
 
@@ -41,7 +42,11 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
   };
 
   const removeWorker = (id: string) => {
-    setWorkers(workers.filter(w => w.id !== id));
+    if (onDeleteWorker) {
+      onDeleteWorker(id);
+    } else {
+      setWorkers(workers.filter(w => w.id !== id));
+    }
   };
 
   const toggleExpand = (id: string) => {
@@ -180,13 +185,24 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
           </div>
           {sectionTitle}
         </h2>
-        <button
-          onClick={addWorker}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-md hover:shadow-lg active:scale-95"
-        >
-          <Plus className="w-4 h-4" />
-          근로자 추가
-        </button>
+        <div className="flex items-center gap-2">
+          {expandedWorkerId !== null && (
+            <button
+              onClick={() => setExpandedWorkerId(null)}
+              className="flex items-center gap-2 bg-slate-100 text-slate-600 px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all border border-slate-200"
+            >
+              <ChevronUp className="w-4 h-4" />
+              전체 접기
+            </button>
+          )}
+          <button
+            onClick={addWorker}
+            className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-md hover:shadow-lg active:scale-95"
+          >
+            <Plus className="w-4 h-4" />
+            근로자 추가
+          </button>
+        </div>
       </div>
 
       <div className="space-y-4">
