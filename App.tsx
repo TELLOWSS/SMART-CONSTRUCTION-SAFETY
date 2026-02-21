@@ -860,7 +860,7 @@ function App() {
                         </div>
                         <div className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
                           <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">1</div>
-                          <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">안전시설 인건비</div>
+                          <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">유도원 및 감시자 인건비</div>
                           <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{totalLaborCost.toLocaleString()}</div>
                           <div className="col-span-2 p-2 text-xs text-slate-500">첨부 1 참조</div>
                         </div>
@@ -943,7 +943,7 @@ function App() {
              </div>
             </div>
 
-            {/* ===== 첨부 1: 안전시설 인건비 제출 증빙 양식 (Attachment 1) ===== */}
+            {/* ===== 첨부 1: 유도원 및 감시자 인건비 제출 증빙 양식 (Attachment 1) ===== */}
             <div className="bg-white shadow-2xl max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm print:break-after-page">
               <div className="p-[10mm] md:p-[15mm]">
                 <div className="border-2 border-slate-900 p-1">
