@@ -683,6 +683,38 @@ function App() {
     }
   };
 
+  // --- Worker Delete Logic (with attendance cleanup) ---
+
+  const deleteWorkerFromLabor = (workerId: string) => {
+    setWorkers(prev => prev.filter(w => w.id !== workerId));
+    setAttendance(prev => {
+      const updated = { ...prev };
+      Object.keys(updated).forEach(date => {
+        if (updated[date]?.[workerId] !== undefined) {
+          const day = { ...updated[date] };
+          delete day[workerId];
+          updated[date] = day;
+        }
+      });
+      return updated;
+    });
+  };
+
+  const deleteWorkerFromSafety = (workerId: string) => {
+    setSafetyWorkers(prev => prev.filter(w => w.id !== workerId));
+    setSafetyAttendance(prev => {
+      const updated = { ...prev };
+      Object.keys(updated).forEach(date => {
+        if (updated[date]?.[workerId] !== undefined) {
+          const day = { ...updated[date] };
+          delete day[workerId];
+          updated[date] = day;
+        }
+      });
+      return updated;
+    });
+  };
+
   // --- Worker Transfer Logic ---
 
   // Move a worker from 유도원/감시자 section to 안전시설 section
@@ -957,6 +989,7 @@ function App() {
               setWorkers={setWorkers}
               onMoveWorker={moveWorkerToSafety}
               moveLabel="→ 안전시설로 이동"
+              onDeleteWorker={deleteWorkerFromLabor}
             />
 
             {/* Worker Transfer Divider */}
@@ -976,6 +1009,7 @@ function App() {
               reportTitle="안전시설 인건비 근로자 증빙 양식"
               onMoveWorker={moveWorkerToLabor}
               moveLabel="← 유도원으로 이동"
+              onDeleteWorker={deleteWorkerFromSafety}
             />
             <SafetyCostTable items={safetyItems} setItems={setSafetyItems} />
 
