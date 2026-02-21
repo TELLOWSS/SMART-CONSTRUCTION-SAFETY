@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Worker, PhotoEvidence, DailyAttendance, PHOTO_CATEGORIES } from '../types';
+import { Worker, PhotoEvidence, DailyAttendance, PHOTO_CATEGORIES, CompressionResult } from '../types';
 import { Calendar, ChevronLeft, ChevronRight, CheckCircle2, Circle, Camera, Plus, MapPin, ImagePlus, Edit3, User, Clock, Loader2, EyeOff, Eye } from 'lucide-react';
 
 interface Props {
@@ -182,7 +182,7 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
     if (e.target.files && e.target.files.length > 0) {
       setIsProcessing(true);
       try {
-        const files = Array.from(e.target.files);
+        const files: File[] = Array.from(e.target.files);
         const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
         const validationErrors: string[] = [];
         const compressionErrors: string[] = [];
@@ -206,17 +206,24 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
         
         for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
           const batch = validFiles.slice(i, i + BATCH_SIZE);
-          const compressionPromises = batch.map(file => 
-            compressImage(file)
-              .then(blob => ({ success: true as const, blob, file }))
-              .catch(error => ({ success: false as const, error, file }))
-          );
+          const compressionPromises = batch.map(async (file): Promise<CompressionResult> => {
+            try {
+              const blob = await compressImage(file);
+              return { success: true, blob, file };
+            } catch (error) {
+              return { success: false, error, file };
+            }
+          });
           const results = await Promise.all(compressionPromises);
           
           // Process successful compressions and log failures
-          results.forEach(result => {
-            if (result.success) {
-              newPhotos.push({
+          for (const result of results) {
+            if (result.success === false) {
+              console.error(`Failed to compress ${result.file.name}:`, result.error);
+              compressionErrors.push(`"${result.file.name}" 압축 실패: ${result.error instanceof Error ? result.error.message : '알 수 없는 오류'}`);
+              continue;
+            }
+            newPhotos.push({
                 id: crypto.randomUUID(),
                 fileUrl: URL.createObjectURL(result.blob),
                 category: PHOTO_CATEGORIES[0],
@@ -224,11 +231,7 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
                 location: '',
                 date: selectedDate,
               });
-            } else {
-              console.error(`Failed to compress ${result.file.name}:`, result.error);
-              compressionErrors.push(`"${result.file.name}" 압축 실패: ${result.error instanceof Error ? result.error.message : '알 수 없는 오류'}`);
-            }
-          });
+          }
         }
         
         // Show all errors together if any occurred

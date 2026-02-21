@@ -730,7 +730,7 @@ function App() {
 
            {/* Right: Actions (Order 2 on mobile to be right, Order 3 on desktop) */}
            <div className="order-2 md:order-3 flex items-center gap-2 shrink-0">
-              <GeminiAssistant projectInfo={projectInfo} workers={workers} safetyItems={safetyItems} photos={photos} />
+              <GeminiAssistant projectInfo={projectInfo} workers={workers} safetyItems={safetyItems} photos={[...laborPhotos, ...safetyPhotos]} />
               
               {/* Data Management Buttons */}
               <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
