@@ -10,9 +10,11 @@ interface Props {
   year?: number; // Added for report view
   month?: number; // Added for report view
   readOnly?: boolean;
+  sectionTitle?: string; // Edit mode heading
+  reportTitle?: string;  // ReadOnly mode heading
 }
 
-export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendance = {}, year = new Date().getFullYear(), month = new Date().getMonth() + 1, readOnly = false }) => {
+export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendance = {}, year = new Date().getFullYear(), month = new Date().getMonth() + 1, readOnly = false, sectionTitle = '유도원 및 감시자 인건비 산출 정보', reportTitle = '1. 유도원 및 감시자 인건비 제출 증빙 양식' }) => {
   // For expanding detailed input in edit mode
   const [expandedWorkerId, setExpandedWorkerId] = useState<string | null>(null);
 
@@ -76,7 +78,7 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
       <div className="mb-8 break-inside-avoid">
         <h3 className="text-lg font-bold mb-3 flex items-center gap-2 text-slate-800">
           <span className="w-1.5 h-6 bg-slate-800 inline-block rounded-sm"></span>
-          1. 유도원 및 감시자 인건비 제출 증빙 양식
+          {reportTitle}
         </h3>
         
         {hiddenWorkersCount > 0 && (
@@ -174,7 +176,7 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
           <div className="bg-indigo-100 p-2 rounded-xl text-indigo-600">
              <Users className="w-5 h-5" />
           </div>
-          유도원 및 감시자 인건비 산출 정보
+          {sectionTitle}
         </h2>
         <button
           onClick={addWorker}
