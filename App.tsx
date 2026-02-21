@@ -415,28 +415,68 @@ function App() {
               return;
             }
 
-            if(confirm("기존 데이터가 덮어씌워집니다. 복구하시겠습니까?")) {
-               // Clean up existing blob URLs to prevent memory leaks before overwriting
-               photos.forEach(p => {
-                 if (p.fileUrl && p.fileUrl.startsWith('blob:')) {
-                   URL.revokeObjectURL(p.fileUrl);
-                 }
-               });
+            // --- 섹션별 선택 복구 ---
+            const backupWorkerCount = Array.isArray(parsed.data.workers) ? parsed.data.workers.length : 0;
+            const backupSafetyCount = Array.isArray(parsed.data.safetyItems) ? parsed.data.safetyItems.length : 0;
+            const backupPhotoCount = Array.isArray(parsed.data.photos) ? parsed.data.photos.length : 0;
+            const backupSiteName = parsed.data.projectInfo?.siteName || '미입력';
 
-               // Validate and restore with defaults
-               setProjectInfo({
-                 ...INITIAL_PROJECT_INFO,
-                 ...parsed.data.projectInfo
-               });
-               setWorkers(Array.isArray(parsed.data.workers) ? parsed.data.workers : []);
-               setAttendance(parsed.data.attendance && typeof parsed.data.attendance === 'object' ? parsed.data.attendance : {});
-               setSafetyItems(Array.isArray(parsed.data.safetyItems) ? parsed.data.safetyItems : []);
-               
-               // 사진 복구 - 안전하게 청크 단위로 처리
-               restorePhotosWithValidation(parsed.data.photos || []);
-               
-               alert("✅ 데이터가 성공적으로 복구되었습니다.");
+            // 유도원/감시자 인건비 섹션 복구 여부
+            const restoreLabor = confirm(
+              `[1/2] 유도원 및 감시자 인건비 복구\n\n` +
+              `백업 파일 정보:\n` +
+              `• 공사명: ${backupSiteName}\n` +
+              `• 근로자: ${backupWorkerCount}명\n\n` +
+              `현장 기본 정보와 유도원/감시자 인건비(근로자·출역 기록)를\n` +
+              `이 백업 파일로 복구하시겠습니까?\n\n` +
+              `(취소: 현재 데이터 유지)`
+            );
+
+            // 안전시설 인건비 섹션 복구 여부
+            const restoreSafety = confirm(
+              `[2/2] 안전시설 인건비 복구\n\n` +
+              `백업 파일 정보:\n` +
+              `• 안전시설 품목: ${backupSafetyCount}개\n` +
+              `• 사진: ${backupPhotoCount}장\n\n` +
+              `안전시설 인건비 내역과 사진을\n` +
+              `이 백업 파일로 복구하시겠습니까?\n\n` +
+              `(취소: 현재 데이터 유지)`
+            );
+
+            if (!restoreLabor && !restoreSafety) {
+              alert("복구할 항목이 없습니다. 작업이 취소되었습니다.");
+              return;
             }
+
+            // Clean up existing blob URLs only if photos section is being restored
+            if (restoreSafety) {
+              photos.forEach(p => {
+                if (p.fileUrl && p.fileUrl.startsWith('blob:')) {
+                  URL.revokeObjectURL(p.fileUrl);
+                }
+              });
+            }
+
+            // Restore selected sections
+            if (restoreLabor) {
+              setProjectInfo({
+                ...INITIAL_PROJECT_INFO,
+                ...parsed.data.projectInfo
+              });
+              setWorkers(Array.isArray(parsed.data.workers) ? parsed.data.workers : []);
+              setAttendance(parsed.data.attendance && typeof parsed.data.attendance === 'object' ? parsed.data.attendance : {});
+            }
+
+            if (restoreSafety) {
+              setSafetyItems(Array.isArray(parsed.data.safetyItems) ? parsed.data.safetyItems : []);
+              // 사진 복구 - 안전하게 청크 단위로 처리
+              restorePhotosWithValidation(parsed.data.photos || []);
+            }
+
+            const restoredSections: string[] = [];
+            if (restoreLabor) restoredSections.push(`유도원/감시자 인건비 (근로자 ${backupWorkerCount}명)`);
+            if (restoreSafety) restoredSections.push(`안전시설 인건비 (품목 ${backupSafetyCount}개, 사진 ${backupPhotoCount}장)`);
+            alert(`✅ 복구가 완료되었습니다.\n\n복구된 항목:\n${restoredSections.map(s => `• ${s}`).join('\n')}`);
           }
         } catch (error) {
           console.error("Restore failed:", error);
