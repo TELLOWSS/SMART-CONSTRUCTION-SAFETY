@@ -65,6 +65,12 @@ export const WORKER_ROLES = [
   "기타"
 ];
 
+// 안전시설 인건비 대상 직종 (안전시설 설치·유지 인력)
+export const SAFETY_FACILITY_ROLES = ["안전반장", "안전시설공", "보건관리자", "환경관리자", "기타"];
+
+// 장비유도·화기감시자 인건비 대상 직종 (전담 안전보건인력)
+export const EQUIPMENT_GUIDE_ROLES = ["신호수", "화재감시자", "유도원"];
+
 export const PHOTO_CATEGORIES = [
   "안전난간 설치 및 보수",
   "추락방지망 설치 상태",

@@ -7,7 +7,7 @@ import { PhotoLedger } from './components/PhotoLedger';
 import { DailyLogManager } from './components/DailyLogManager';
 import { GeminiAssistant } from './components/GeminiAssistant';
 import { UserGuide } from './components/UserGuide';
-import { ProjectInfo, Worker, PhotoEvidence, DailyAttendance, SafetyItem } from './types';
+import { ProjectInfo, Worker, PhotoEvidence, DailyAttendance, SafetyItem, SAFETY_FACILITY_ROLES, EQUIPMENT_GUIDE_ROLES } from './types';
 import { Printer, Layout, FileText, ShieldCheck, CalendarCheck, HelpCircle, BarChart3, ChevronRight, Clock, Download, Upload, RotateCcw, ShoppingCart, Loader2, Save, FilePlus } from 'lucide-react';
 import { 
   validatePhotoData, 
@@ -574,6 +574,8 @@ function App() {
 
   // Calculate stats for dashboard
   const totalLaborCost = workers.reduce((acc, curr) => acc + (curr.daysWorked * curr.dailyRate), 0);
+  const totalLaborCost1 = workers.filter(w => SAFETY_FACILITY_ROLES.includes(w.role)).reduce((acc, curr) => acc + (curr.daysWorked * curr.dailyRate), 0);
+  const totalLaborCost2 = workers.filter(w => EQUIPMENT_GUIDE_ROLES.includes(w.role)).reduce((acc, curr) => acc + (curr.daysWorked * curr.dailyRate), 0);
   const totalMaterialCost = safetyItems.reduce((acc, curr) => acc + (curr.quantity * curr.unitPrice), 0);
   const totalCost = totalLaborCost + totalMaterialCost;
   const totalPhotos = photos.length;
@@ -861,15 +863,21 @@ function App() {
                         <div className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
                           <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">1</div>
                           <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">안전시설 인건비</div>
-                          <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{totalLaborCost.toLocaleString()}</div>
+                          <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{totalLaborCost1.toLocaleString()}</div>
                           <div className="col-span-2 p-2 text-xs text-slate-500">첨부 1 참조</div>
+                        </div>
+                        <div className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
+                          <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">2</div>
+                          <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">장비유도·화기감시자 인건비</div>
+                          <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{totalLaborCost2.toLocaleString()}</div>
+                          <div className="col-span-2 p-2 text-xs text-slate-500">첨부 2 참조</div>
                         </div>
                         {showSafetyCost && (
                           <div className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
-                            <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">2</div>
+                            <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">3</div>
                             <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">안전시설 재료비</div>
                             <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{totalMaterialCost.toLocaleString()}</div>
-                            <div className="col-span-2 p-2 text-xs text-slate-500">첨부 2 참조</div>
+                            <div className="col-span-2 p-2 text-xs text-slate-500">첨부 3 참조</div>
                           </div>
                         )}
                         <div className="grid grid-cols-12 bg-slate-100 font-bold border-t border-slate-400 text-center items-center">
@@ -886,7 +894,31 @@ function App() {
                       <div className="flex flex-col items-end pr-8 gap-3">
                          <p className="text-lg font-serif font-bold mb-4">{formatDateToKorean(projectInfo.reportDate)}</p>
                          <div className="text-right space-y-3">
-                           {/* Manager Signature */}
+                           {/* Safety Manager Signature (작성자 – listed first) */}
+                           <div className="flex items-center justify-end gap-4">
+                              <span className="font-bold text-lg font-serif">작 성 자 (안전팀장) :</span>
+                              <div className="relative w-48 h-16 flex items-center justify-start border-b-2 border-slate-900">
+                                <span className="text-lg font-serif text-slate-900 ml-2 mr-auto">{projectInfo.safetyManagerName}</span>
+                                <div className="absolute right-2 flex items-center">
+                                  <span className="text-xs text-slate-400 font-serif mr-1">(인)</span>
+                                  {projectInfo.safetyManagerSignature && (
+                                    <img 
+                                      src={projectInfo.safetyManagerSignature} 
+                                      alt="safety_signature" 
+                                      style={{
+                                          position: 'absolute',
+                                          right: '-10px',
+                                          top: '50%',
+                                          transform: `translateY(-50%) rotate(${projectInfo.safetyManagerSignatureStyle?.rotation || 0}deg) translate(${projectInfo.safetyManagerSignatureStyle?.offsetX || 0}px, ${projectInfo.safetyManagerSignatureStyle?.offsetY || 0}px) scale(${projectInfo.safetyManagerSignatureStyle?.scale || 1.0})`,
+                                          mixBlendMode: 'darken'
+                                      }}
+                                      className="h-14 w-auto origin-center pointer-events-none"
+                                    />
+                                  )}
+                                </div>
+                              </div>
+                           </div>
+                           {/* Manager Signature (청구인 – listed second) */}
                            <div className="flex items-center justify-end gap-4">
                               <span className="font-bold text-lg font-serif">청 구 인 (현장소장) :</span>
                               <div className="relative w-48 h-16 flex items-center justify-start border-b-2 border-slate-900">
@@ -911,30 +943,6 @@ function App() {
                               </div>
                            </div>
 
-                           {/* Safety Manager Signature */}
-                           <div className="flex items-center justify-end gap-4">
-                              <span className="font-bold text-lg font-serif">확 인 자 (안전팀장) :</span>
-                              <div className="relative w-48 h-16 flex items-center justify-start border-b-2 border-slate-900">
-                                <span className="text-lg font-serif text-slate-900 ml-2 mr-auto">{projectInfo.safetyManagerName}</span>
-                                <div className="absolute right-2 flex items-center">
-                                  <span className="text-xs text-slate-400 font-serif mr-1">(인)</span>
-                                  {projectInfo.safetyManagerSignature && (
-                                    <img 
-                                      src={projectInfo.safetyManagerSignature} 
-                                      alt="safety_signature" 
-                                      style={{
-                                          position: 'absolute',
-                                          right: '-10px',
-                                          top: '50%',
-                                          transform: `translateY(-50%) rotate(${projectInfo.safetyManagerSignatureStyle?.rotation || 0}deg) translate(${projectInfo.safetyManagerSignatureStyle?.offsetX || 0}px, ${projectInfo.safetyManagerSignatureStyle?.offsetY || 0}px) scale(${projectInfo.safetyManagerSignatureStyle?.scale || 1.0})`,
-                                          mixBlendMode: 'darken'
-                                      }}
-                                      className="h-14 w-auto origin-center pointer-events-none"
-                                    />
-                                  )}
-                                </div>
-                              </div>
-                           </div>
                          </div>
                       </div>
                     </div>
@@ -958,6 +966,8 @@ function App() {
                       attendance={attendance}
                       year={projectInfo.year}
                       month={projectInfo.month}
+                      filterRoles={SAFETY_FACILITY_ROLES}
+                      sectionTitle="1. 안전시설 인건비 제출 증빙 양식"
                       readOnly
                     />
                   </div>
@@ -965,14 +975,38 @@ function App() {
               </div>
             </div>
 
-            {/* ===== 첨부 2: 재료비 내역 (Attachment 2) ===== */}
+            {/* ===== 첨부 2: 장비유도·화기감시자 인건비 제출 증빙 양식 (Attachment 2) ===== */}
+            <div className="bg-white shadow-2xl max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm print:break-after-page">
+              <div className="p-[10mm] md:p-[15mm]">
+                <div className="border-2 border-slate-900 p-1">
+                  <div className="border border-slate-600 p-8">
+                    <div className="border-b-2 border-slate-900 pb-3 mb-6 text-center break-inside-avoid">
+                      <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 첨 부 2 】</p>
+                      <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {projectInfo.year}년 {projectInfo.month}월</p>
+                    </div>
+                    <LaborCostTable
+                      workers={workers}
+                      setWorkers={setWorkers}
+                      attendance={attendance}
+                      year={projectInfo.year}
+                      month={projectInfo.month}
+                      filterRoles={EQUIPMENT_GUIDE_ROLES}
+                      sectionTitle="1. 장비유도·화기감시자 인건비 제출 증빙 양식"
+                      readOnly
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ===== 첨부 3: 재료비 내역 (Attachment 3) ===== */}
             {showSafetyCost && (
               <div className="bg-white shadow-2xl max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm print:break-after-page">
                 <div className="p-[10mm] md:p-[15mm]">
                   <div className="border-2 border-slate-900 p-1">
                     <div className="border border-slate-600 p-8">
                       <div className="border-b-2 border-slate-900 pb-3 mb-6 text-center break-inside-avoid">
-                        <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 첨 부 2 】</p>
+                        <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 첨 부 3 】</p>
                         <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {projectInfo.year}년 {projectInfo.month}월</p>
                       </div>
                       <SafetyCostTable 
@@ -986,13 +1020,13 @@ function App() {
               </div>
             )}
 
-            {/* ===== 첨부 3 (또는 첨부 2): 항목별 증빙사진대지 (Attachment) ===== */}
+            {/* ===== 첨부 4 (또는 첨부 3): 항목별 증빙사진대지 (Attachment) ===== */}
             <div className="bg-white shadow-2xl max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm">
               <div className="p-[10mm] md:p-[15mm]">
                 <div className="border-2 border-slate-900 p-1">
                   <div className="border border-slate-600 p-8">
                     <div className="border-b-2 border-slate-900 pb-3 mb-6 text-center break-inside-avoid">
-                      <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 첨 부 {showSafetyCost ? '3' : '2'} 】</p>
+                      <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 첨 부 {showSafetyCost ? '4' : '3'} 】</p>
                       <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {projectInfo.year}년 {projectInfo.month}월</p>
                     </div>
                     <PhotoLedger photos={photos} setPhotos={setPhotos} readOnly />
