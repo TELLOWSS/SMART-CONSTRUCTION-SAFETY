@@ -873,7 +873,7 @@ function App() {
                       onChange={(e) => setShowSafetyCost(e.target.checked)}
                       className="accent-indigo-600 w-4 h-4"
                     />
-                    <span>안전시설비(재료비) 포함</span>
+                    <span>안전시설 인건비 첨부자료 포함</span>
                  </label>
             </div>
 
@@ -904,17 +904,15 @@ function App() {
                           <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{totalLaborCost.toLocaleString()}</div>
                           <div className="col-span-2 p-2 text-xs text-slate-500">첨부 1 참조</div>
                         </div>
-                        {showSafetyCost && (
-                          <div className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
-                            <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">2</div>
-                            <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">안전시설 인건비</div>
-                            <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{totalMaterialCost.toLocaleString()}</div>
-                            <div className="col-span-2 p-2 text-xs text-slate-500">첨부 2 참조</div>
-                          </div>
-                        )}
+                        <div className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
+                          <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">2</div>
+                          <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">안전시설 인건비</div>
+                          <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{totalMaterialCost.toLocaleString()}</div>
+                          <div className="col-span-2 p-2 text-xs text-slate-500">첨부 2 참조</div>
+                        </div>
                         <div className="grid grid-cols-12 bg-slate-100 font-bold border-t border-slate-400 text-center items-center">
                           <div className="col-span-6 border-r border-slate-300 p-2">합 계</div>
-                          <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 text-indigo-900">{(showSafetyCost ? totalCost : totalLaborCost).toLocaleString()}</div>
+                          <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 text-indigo-900">{totalCost.toLocaleString()}</div>
                           <div className="col-span-2 p-2"></div>
                         </div>
                       </div>
