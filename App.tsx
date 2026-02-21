@@ -845,15 +845,40 @@ function App() {
                     
                     <ProjectHeader info={projectInfo} onChange={setProjectInfo} readOnly />
                     
-                    {/* 1. Labor Cost Evidence */}
-                    <LaborCostTable 
-                      workers={workers} 
-                      setWorkers={setWorkers} 
-                      attendance={attendance}
-                      year={projectInfo.year}
-                      month={projectInfo.month}
-                      readOnly 
-                    />
+                    {/* 안전관리비 사용 내역 요약 (갑지 형식) */}
+                    <div className="mb-8 break-inside-avoid">
+                      <h3 className="text-lg font-bold mb-3 flex items-center gap-2 text-slate-800">
+                        <span className="w-1.5 h-6 bg-slate-800 inline-block rounded-sm"></span>
+                        안전관리비 사용 내역 요약
+                      </h3>
+                      <div className="border border-slate-400 text-sm">
+                        <div className="grid grid-cols-12 bg-slate-100 border-b border-slate-400 font-bold text-center">
+                          <div className="col-span-1 border-r border-slate-300 p-2">번호</div>
+                          <div className="col-span-5 border-r border-slate-300 p-2">구 분</div>
+                          <div className="col-span-4 border-r border-slate-300 p-2">금 액 (원)</div>
+                          <div className="col-span-2 p-2">비 고</div>
+                        </div>
+                        <div className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
+                          <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">1</div>
+                          <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">안전시설 인건비</div>
+                          <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{totalLaborCost.toLocaleString()}</div>
+                          <div className="col-span-2 p-2 text-xs text-slate-500">첨부 1 참조</div>
+                        </div>
+                        {showSafetyCost && (
+                          <div className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
+                            <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">2</div>
+                            <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">안전시설 재료비</div>
+                            <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{totalMaterialCost.toLocaleString()}</div>
+                            <div className="col-span-2 p-2 text-xs text-slate-500">첨부 2 참조</div>
+                          </div>
+                        )}
+                        <div className="grid grid-cols-12 bg-slate-100 font-bold border-t border-slate-400 text-center items-center">
+                          <div className="col-span-6 border-r border-slate-300 p-2">합 계</div>
+                          <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 text-indigo-900">{(showSafetyCost ? totalCost : totalLaborCost).toLocaleString()}</div>
+                          <div className="col-span-2 p-2"></div>
+                        </div>
+                      </div>
+                    </div>
                     
                     {/* Signature Section – ends the 갑지 */}
                     <div className="mt-12 text-center pt-6 print:mt-8 break-inside-avoid">
@@ -918,14 +943,36 @@ function App() {
              </div>
             </div>
 
-            {/* ===== 첨부 1: 재료비 내역 (Attachment 1) ===== */}
+            {/* ===== 첨부 1: 안전시설 인건비 제출 증빙 양식 (Attachment 1) ===== */}
+            <div className="bg-white shadow-2xl max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm print:break-after-page">
+              <div className="p-[10mm] md:p-[15mm]">
+                <div className="border-2 border-slate-900 p-1">
+                  <div className="border border-slate-600 p-8">
+                    <div className="border-b-2 border-slate-900 pb-3 mb-6 text-center break-inside-avoid">
+                      <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 첨 부 1 】</p>
+                      <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {projectInfo.year}년 {projectInfo.month}월</p>
+                    </div>
+                    <LaborCostTable
+                      workers={workers}
+                      setWorkers={setWorkers}
+                      attendance={attendance}
+                      year={projectInfo.year}
+                      month={projectInfo.month}
+                      readOnly
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ===== 첨부 2: 재료비 내역 (Attachment 2) ===== */}
             {showSafetyCost && (
               <div className="bg-white shadow-2xl max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm print:break-after-page">
                 <div className="p-[10mm] md:p-[15mm]">
                   <div className="border-2 border-slate-900 p-1">
                     <div className="border border-slate-600 p-8">
                       <div className="border-b-2 border-slate-900 pb-3 mb-6 text-center break-inside-avoid">
-                        <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 첨 부 1 】</p>
+                        <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 첨 부 2 】</p>
                         <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {projectInfo.year}년 {projectInfo.month}월</p>
                       </div>
                       <SafetyCostTable 
@@ -939,13 +986,13 @@ function App() {
               </div>
             )}
 
-            {/* ===== 첨부 2 (또는 첨부 1): 항목별 증빙사진대지 (Attachment) ===== */}
+            {/* ===== 첨부 3 (또는 첨부 2): 항목별 증빙사진대지 (Attachment) ===== */}
             <div className="bg-white shadow-2xl max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm">
               <div className="p-[10mm] md:p-[15mm]">
                 <div className="border-2 border-slate-900 p-1">
                   <div className="border border-slate-600 p-8">
                     <div className="border-b-2 border-slate-900 pb-3 mb-6 text-center break-inside-avoid">
-                      <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 첨 부 {showSafetyCost ? '2' : '1'} 】</p>
+                      <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 첨 부 {showSafetyCost ? '3' : '2'} 】</p>
                       <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {projectInfo.year}년 {projectInfo.month}월</p>
                     </div>
                     <PhotoLedger photos={photos} setPhotos={setPhotos} readOnly />
