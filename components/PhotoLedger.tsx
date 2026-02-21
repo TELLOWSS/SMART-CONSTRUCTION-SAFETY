@@ -8,9 +8,10 @@ interface Props {
   setPhotos: React.Dispatch<React.SetStateAction<PhotoEvidence[]>>;
   readOnly?: boolean;
   title?: string;
+  categoryOptions?: string[]; // Custom category list (e.g., from worker roles)
 }
 
-export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = false, title }) => {
+export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = false, title, categoryOptions }) => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Image Compression Utility (Duplicated for component isolation, in a real app would be a shared util)
@@ -110,7 +111,7 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
             newPhotos.push({
                 id: crypto.randomUUID(),
                 fileUrl: URL.createObjectURL(result.blob),
-                category: PHOTO_CATEGORIES[0],
+                category: (categoryOptions && categoryOptions.length > 0) ? categoryOptions[0] : PHOTO_CATEGORIES[0],
                 description: '',
                 location: '',
                 date: new Date().toISOString().split('T')[0],
@@ -243,7 +244,7 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
                     onChange={(e) => updatePhoto(photo.id, 'category', e.target.value)}
                     className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all cursor-pointer font-medium text-slate-700 appearance-none"
                     >
-                    {PHOTO_CATEGORIES.map(cat => (
+                    {(categoryOptions && categoryOptions.length > 0 ? categoryOptions : PHOTO_CATEGORIES).map(cat => (
                         <option key={cat} value={cat}>{cat}</option>
                     ))}
                     </select>
