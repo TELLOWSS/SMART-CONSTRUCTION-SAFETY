@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ProjectInfo, SignatureStyle } from '../types';
-import { Building, Calendar, User, Briefcase, UserCheck, PenTool } from 'lucide-react';
+import { Building, Calendar, User, Briefcase, UserCheck, PenTool, X } from 'lucide-react';
 import { SignaturePad } from './SignaturePad';
 
 interface Props {
@@ -42,6 +42,14 @@ export const ProjectHeader: React.FC<Props> = ({ info, onChange, readOnly = fals
       });
     }
     setActiveSignatureField(null);
+  };
+
+  const handleClearSignature = (field: 'manager' | 'safety') => {
+    if (field === 'manager') {
+      onChange({ ...info, managerSignature: undefined, managerSignatureStyle: undefined });
+    } else {
+      onChange({ ...info, safetyManagerSignature: undefined, safetyManagerSignatureStyle: undefined });
+    }
   };
 
   if (readOnly) {
@@ -171,6 +179,15 @@ export const ProjectHeader: React.FC<Props> = ({ info, onChange, readOnly = fals
                    <PenTool className="w-5 h-5" />
                  )}
               </button>
+              {info.managerSignature && (
+                <button
+                  onClick={() => handleClearSignature('manager')}
+                  className="flex items-center justify-center px-2 rounded-xl border border-red-200 bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-all"
+                  title="서명 초기화"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -200,6 +217,15 @@ export const ProjectHeader: React.FC<Props> = ({ info, onChange, readOnly = fals
                    <PenTool className="w-5 h-5" />
                  )}
               </button>
+              {info.safetyManagerSignature && (
+                <button
+                  onClick={() => handleClearSignature('safety')}
+                  className="flex items-center justify-center px-2 rounded-xl border border-red-200 bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-all"
+                  title="서명 초기화"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
         </div>
