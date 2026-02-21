@@ -93,7 +93,7 @@ export const SafetyCostTable: React.FC<Props> = ({ items, setItems, readOnly = f
           <div className="bg-orange-100 p-2 rounded-xl text-orange-600">
              <ShoppingCart className="w-5 h-5" />
           </div>
-          안전시설 재료비
+          안전시설 재료비 내역
         </h2>
         <button
           onClick={addItem}

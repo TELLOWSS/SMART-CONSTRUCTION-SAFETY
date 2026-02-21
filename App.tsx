@@ -51,7 +51,8 @@ function App() {
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [backupProgress, setBackupProgress] = useState(0);
   const [isPrinting, setIsPrinting] = useState(false); // New state for print loading
-  const [showSafetyCost, setShowSafetyCost] = useState(true); // Toggle for Material Cost in Report
+  const [showSafetyCost, setShowSafetyCost] = useState(true); // Toggle for 안전시설 인건비 section in Report
+  const [showSafetyItems, setShowSafetyItems] = useState(true); // Toggle for 안전시설 재료비 내역(품목) in Report
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1089,7 +1090,17 @@ function App() {
                       onChange={(e) => setShowSafetyCost(e.target.checked)}
                       className="accent-indigo-600 w-4 h-4"
                     />
-                    <span>안전시설 인건비 첨부자료 포함</span>
+                    <span>안전시설 인건비 내역 포함</span>
+                 </label>
+                 <label className={`flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow-sm border cursor-pointer hover:bg-slate-50 transition-all select-none text-sm font-bold ${showSafetyCost ? 'border-slate-200 text-slate-700' : 'border-slate-100 text-slate-400 cursor-not-allowed'}`}>
+                    <input 
+                      type="checkbox" 
+                      checked={showSafetyItems} 
+                      onChange={(e) => setShowSafetyItems(e.target.checked)}
+                      disabled={!showSafetyCost}
+                      className="accent-indigo-600 w-4 h-4"
+                    />
+                    <span>안전시설 재료비 내역(품목) 포함</span>
                  </label>
             </div>
 
@@ -1241,15 +1252,17 @@ function App() {
                             <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{totalSafetyWorkersCost.toLocaleString()}</div>
                             <div className="col-span-2 p-2 text-xs text-slate-500">첨부 1 참조</div>
                           </div>
+                          {showSafetyItems && (
                           <div className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
                             <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">2</div>
                             <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">안전시설 재료비</div>
                             <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{totalMaterialCost.toLocaleString()}</div>
                             <div className="col-span-2 p-2 text-xs text-slate-500">첨부 1 참조</div>
                           </div>
+                          )}
                           <div className="grid grid-cols-12 bg-slate-100 font-bold border-t border-slate-400 text-center items-center">
                             <div className="col-span-6 border-r border-slate-300 p-2">합 계</div>
-                            <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 text-indigo-900">{totalSafetyCost.toLocaleString()}</div>
+                            <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 text-indigo-900">{(showSafetyItems ? totalSafetyCost : totalSafetyWorkersCost).toLocaleString()}</div>
                             <div className="col-span-2 p-2"></div>
                           </div>
                         </div>
@@ -1340,11 +1353,13 @@ function App() {
                           readOnly
                         />
                       )}
+                      {showSafetyItems && (
                       <SafetyCostTable 
                         items={safetyItems}
                         setItems={setSafetyItems}
                         readOnly
                       />
+                      )}
                     </div>
                   </div>
                 </div>
