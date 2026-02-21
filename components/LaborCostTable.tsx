@@ -20,6 +20,7 @@ interface Props {
 export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendance = {}, year = new Date().getFullYear(), month = new Date().getMonth() + 1, readOnly = false, sectionTitle = '유도원 및 감시자 인건비 산출 정보', reportTitle = '1. 유도원 및 감시자 인건비 제출 증빙 양식', onMoveWorker, moveLabel = '→ 이동', onDeleteWorker }) => {
   // For expanding detailed input in edit mode
   const [expandedWorkerId, setExpandedWorkerId] = useState<string | null>(null);
+  const [sectionCollapsed, setSectionCollapsed] = useState(false);
 
   const addWorker = () => {
     const newWorker: Worker = {
@@ -177,24 +178,19 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
 
   // Edit Mode
   return (
-    <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 mb-8 no-print hover:shadow-md transition-shadow">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold flex items-center gap-3 text-slate-800">
-          <div className="bg-indigo-100 p-2 rounded-xl text-indigo-600">
+    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 mb-8 no-print hover:shadow-md transition-shadow">
+      <div className="flex justify-between items-center p-8 pb-6">
+        <button
+          onClick={() => setSectionCollapsed(!sectionCollapsed)}
+          className="flex items-center gap-3 text-left flex-1 min-w-0"
+        >
+          <div className="bg-indigo-100 p-2 rounded-xl text-indigo-600 shrink-0">
              <Users className="w-5 h-5" />
           </div>
-          {sectionTitle}
-        </h2>
-        <div className="flex items-center gap-2">
-          {expandedWorkerId !== null && (
-            <button
-              onClick={() => setExpandedWorkerId(null)}
-              className="flex items-center gap-2 bg-slate-100 text-slate-600 px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all border border-slate-200"
-            >
-              <ChevronUp className="w-4 h-4" />
-              전체 접기
-            </button>
-          )}
+          <h2 className="text-xl font-bold text-slate-800">{sectionTitle}</h2>
+          {sectionCollapsed ? <ChevronDown className="w-5 h-5 text-slate-400 shrink-0" /> : <ChevronUp className="w-5 h-5 text-slate-400 shrink-0" />}
+        </button>
+        <div className="flex items-center gap-2 ml-4">
           <button
             onClick={addWorker}
             className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-md hover:shadow-lg active:scale-95"
@@ -205,7 +201,19 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
         </div>
       </div>
 
-      <div className="space-y-4">
+      {!sectionCollapsed && (
+      <div className="px-8 pb-8 space-y-4">
+        {expandedWorkerId !== null && (
+          <div className="flex justify-end">
+            <button
+              onClick={() => setExpandedWorkerId(null)}
+              className="flex items-center gap-2 bg-slate-100 text-slate-600 px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all border border-slate-200"
+            >
+              <ChevronUp className="w-4 h-4" />
+              전체 접기
+            </button>
+          </div>
+        )}
         {workers.map(worker => (
           <div key={worker.id} className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm transition-all hover:border-indigo-200">
             {/* Primary Row */}
@@ -333,12 +341,13 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
              <p className="text-xs mt-1">'근로자 추가' 버튼을 눌러 인원을 등록하세요.</p>
           </div>
         )}
-      </div>
 
-      <div className="mt-6 flex justify-end items-center gap-3 border-t border-slate-100 pt-4">
-         <span className="text-sm font-bold text-slate-500">총 인건비 예상액</span>
-         <span className="text-2xl font-extrabold text-indigo-700">{totalCost.toLocaleString()} 원</span>
+        <div className="flex justify-end items-center gap-3 border-t border-slate-100 pt-4 mt-2">
+           <span className="text-sm font-bold text-slate-500">총 인건비 예상액</span>
+           <span className="text-2xl font-extrabold text-indigo-700">{totalCost.toLocaleString()} 원</span>
+        </div>
       </div>
+      )}
     </div>
   );
 };
