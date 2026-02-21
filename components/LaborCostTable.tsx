@@ -10,9 +10,11 @@ interface Props {
   year?: number; // Added for report view
   month?: number; // Added for report view
   readOnly?: boolean;
+  filterRoles?: string[]; // When provided, only show workers whose role is in this list
+  sectionTitle?: string; // Override the section heading in readOnly mode
 }
 
-export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendance = {}, year = new Date().getFullYear(), month = new Date().getMonth() + 1, readOnly = false }) => {
+export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendance = {}, year = new Date().getFullYear(), month = new Date().getMonth() + 1, readOnly = false, filterRoles, sectionTitle }) => {
   // For expanding detailed input in edit mode
   const [expandedWorkerId, setExpandedWorkerId] = useState<string | null>(null);
 
@@ -60,8 +62,11 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
   };
 
   if (readOnly) {
+    // Apply role filter first, then filter by attendance
+    const roleFilteredWorkers = filterRoles ? workers.filter(w => filterRoles.includes(w.role)) : workers;
+
     // Filter workers to show only those with attendance in the report month
-    const workersWithAttendance = workers.filter(worker => {
+    const workersWithAttendance = roleFilteredWorkers.filter(worker => {
       // Check if worker has any attendance in this month using Array.some() for better readability
       return daysArray.some(day => {
         const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -70,13 +75,14 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
       });
     });
 
-    const hiddenWorkersCount = workers.length - workersWithAttendance.length;
+    const hiddenWorkersCount = roleFilteredWorkers.length - workersWithAttendance.length;
+    const displayTitle = sectionTitle ?? '1. 안전시설 인건비 제출 증빙 양식';
 
     return (
       <div className="mb-8 break-inside-avoid">
         <h3 className="text-lg font-bold mb-3 flex items-center gap-2 text-slate-800">
           <span className="w-1.5 h-6 bg-slate-800 inline-block rounded-sm"></span>
-          1. 안전시설 인건비 제출 증빙 양식
+          {displayTitle}
         </h3>
         
         {hiddenWorkersCount > 0 && (
@@ -154,7 +160,7 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
           {/* Grand Total */}
           <div className="border border-slate-400 bg-slate-100 p-2 flex justify-between items-center font-bold text-sm">
             <span>총 인건비 지급 합계 (Total)</span>
-            <span className="text-indigo-800 text-lg">{totalCost.toLocaleString()} 원</span>
+            <span className="text-indigo-800 text-lg">{workersWithAttendance.reduce((acc, w) => acc + w.daysWorked * w.dailyRate, 0).toLocaleString()} 원</span>
           </div>
         </div>
         
