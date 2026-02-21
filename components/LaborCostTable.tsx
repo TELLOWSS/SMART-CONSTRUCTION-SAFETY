@@ -12,9 +12,11 @@ interface Props {
   readOnly?: boolean;
   sectionTitle?: string; // Edit mode heading
   reportTitle?: string;  // ReadOnly mode heading
+  onMoveWorker?: (workerId: string) => void; // Transfer worker to other section
+  moveLabel?: string; // Label for move button e.g. "→ 안전시설로" or "← 유도원으로"
 }
 
-export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendance = {}, year = new Date().getFullYear(), month = new Date().getMonth() + 1, readOnly = false, sectionTitle = '유도원 및 감시자 인건비 산출 정보', reportTitle = '1. 유도원 및 감시자 인건비 제출 증빙 양식' }) => {
+export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendance = {}, year = new Date().getFullYear(), month = new Date().getMonth() + 1, readOnly = false, sectionTitle = '유도원 및 감시자 인건비 산출 정보', reportTitle = '1. 유도원 및 감시자 인건비 제출 증빙 양식', onMoveWorker, moveLabel = '→ 이동' }) => {
   // For expanding detailed input in edit mode
   const [expandedWorkerId, setExpandedWorkerId] = useState<string | null>(null);
 
@@ -240,6 +242,15 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
                     <span className="block text-[10px] font-bold text-slate-400 uppercase">지급 총액</span>
                     <span className="font-bold text-indigo-700">{(worker.daysWorked * worker.dailyRate).toLocaleString()} 원</span>
                   </div>
+                  {onMoveWorker && (
+                    <button
+                      onClick={() => onMoveWorker(worker.id)}
+                      className="px-3 py-1.5 text-xs font-bold bg-amber-100 text-amber-700 hover:bg-amber-200 rounded-lg transition-colors border border-amber-200"
+                      title={moveLabel}
+                    >
+                      {moveLabel}
+                    </button>
+                  )}
                   <button
                     onClick={() => toggleExpand(worker.id)}
                     className={`p-2 rounded-lg transition-colors ${expandedWorkerId === worker.id ? 'bg-indigo-100 text-indigo-700' : 'text-slate-400 hover:bg-slate-100'}`}

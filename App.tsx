@@ -8,7 +8,7 @@ import { DailyLogManager } from './components/DailyLogManager';
 import { GeminiAssistant } from './components/GeminiAssistant';
 import { UserGuide } from './components/UserGuide';
 import { ProjectInfo, Worker, PhotoEvidence, DailyAttendance, SafetyItem } from './types';
-import { Printer, Layout, FileText, ShieldCheck, CalendarCheck, HelpCircle, BarChart3, ChevronRight, Clock, Download, Upload, RotateCcw, ShoppingCart, Loader2, Save, FilePlus } from 'lucide-react';
+import { Printer, Layout, FileText, ShieldCheck, CalendarCheck, HelpCircle, BarChart3, ChevronRight, Clock, Download, Upload, RotateCcw, ShoppingCart, Loader2, Save, FilePlus, ArrowLeftRight } from 'lucide-react';
 import { 
   validatePhotoData, 
   createBlobUrlFromBase64, 
@@ -682,6 +682,66 @@ function App() {
     }
   };
 
+  // --- Worker Transfer Logic ---
+
+  // Move a worker from 유도원/감시자 section to 안전시설 section
+  const moveWorkerToSafety = (workerId: string) => {
+    const worker = workers.find(w => w.id === workerId);
+    if (!worker) return;
+    // Move attendance data
+    const newAttendance = { ...attendance };
+    const newSafetyAttendance = { ...safetyAttendance };
+    Object.keys(newAttendance).forEach(date => {
+      if (newAttendance[date]?.[workerId] !== undefined) {
+        newSafetyAttendance[date] = { ...(newSafetyAttendance[date] || {}), [workerId]: newAttendance[date][workerId] };
+        const updatedDay = { ...newAttendance[date] };
+        delete updatedDay[workerId];
+        newAttendance[date] = updatedDay;
+      }
+    });
+    setWorkers(prev => prev.filter(w => w.id !== workerId));
+    setSafetyWorkers(prev => [...prev, worker]);
+    setAttendance(newAttendance);
+    setSafetyAttendance(newSafetyAttendance);
+  };
+
+  // Move a worker from 안전시설 section to 유도원/감시자 section
+  const moveWorkerToLabor = (workerId: string) => {
+    const worker = safetyWorkers.find(w => w.id === workerId);
+    if (!worker) return;
+    // Move attendance data
+    const newAttendance = { ...attendance };
+    const newSafetyAttendance = { ...safetyAttendance };
+    Object.keys(newSafetyAttendance).forEach(date => {
+      if (newSafetyAttendance[date]?.[workerId] !== undefined) {
+        newAttendance[date] = { ...(newAttendance[date] || {}), [workerId]: newSafetyAttendance[date][workerId] };
+        const updatedDay = { ...newSafetyAttendance[date] };
+        delete updatedDay[workerId];
+        newSafetyAttendance[date] = updatedDay;
+      }
+    });
+    setSafetyWorkers(prev => prev.filter(w => w.id !== workerId));
+    setWorkers(prev => [...prev, worker]);
+    setAttendance(newAttendance);
+    setSafetyAttendance(newSafetyAttendance);
+  };
+
+  // Move a photo from 유도원/감시자 to 안전시설 증빙사진
+  const movePhotoToSafety = (photoId: string) => {
+    const photo = laborPhotos.find(p => p.id === photoId);
+    if (!photo) return;
+    setLaborPhotos(prev => prev.filter(p => p.id !== photoId));
+    setSafetyPhotos(prev => [...prev, photo]);
+  };
+
+  // Move a photo from 안전시설 to 유도원/감시자 증빙사진
+  const movePhotoToLabor = (photoId: string) => {
+    const photo = safetyPhotos.find(p => p.id === photoId);
+    if (!photo) return;
+    setSafetyPhotos(prev => prev.filter(p => p.id !== photoId));
+    setLaborPhotos(prev => [...prev, photo]);
+  };
+
   // Calculate stats for dashboard
   const totalLaborCost = workers.reduce((acc, curr) => acc + (curr.daysWorked * curr.dailyRate), 0);
   const totalSafetyWorkersCost = safetyWorkers.reduce((acc, curr) => acc + (curr.daysWorked * curr.dailyRate), 0);
@@ -689,6 +749,10 @@ function App() {
   const totalSafetyCost = totalSafetyWorkersCost + totalMaterialCost;
   const totalCost = totalLaborCost + totalSafetyCost;
   const totalPhotos = laborPhotos.length + safetyPhotos.length;
+
+  // Unique worker roles for photo 공종 category options
+  const laborWorkerRoles = [...new Set(workers.map(w => w.role))].filter(Boolean);
+  const safetyWorkerRoles = [...new Set(safetyWorkers.map(w => w.role))].filter(Boolean);
 
   const formatDateToKorean = (dateStr: string) => {
     if (!dateStr) return '';
@@ -887,15 +951,85 @@ function App() {
         {activeTab === 'setup' && (
           <div className="space-y-8 animate-in fade-in duration-300">
             <ProjectHeader info={projectInfo} onChange={setProjectInfo} />
-            <LaborCostTable workers={workers} setWorkers={setWorkers} />
+            <LaborCostTable
+              workers={workers}
+              setWorkers={setWorkers}
+              onMoveWorker={moveWorkerToSafety}
+              moveLabel="→ 안전시설로 이동"
+            />
+
+            {/* Worker Transfer Divider */}
+            <div className="flex items-center gap-4 no-print">
+              <div className="flex-1 h-px bg-slate-200"></div>
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-500 bg-amber-50 border border-amber-200 px-4 py-2 rounded-full">
+                <ArrowLeftRight className="w-4 h-4 text-amber-600" />
+                <span>각 근로자 카드의 이동 버튼으로 섹션 간 이동 가능</span>
+              </div>
+              <div className="flex-1 h-px bg-slate-200"></div>
+            </div>
+
             <LaborCostTable
               workers={safetyWorkers}
               setWorkers={setSafetyWorkers}
               sectionTitle="안전시설 인건비 근로자 산출 정보"
               reportTitle="안전시설 인건비 근로자 증빙 양식"
+              onMoveWorker={moveWorkerToLabor}
+              moveLabel="← 유도원으로 이동"
             />
             <SafetyCostTable items={safetyItems} setItems={setSafetyItems} />
-            <PhotoLedger photos={safetyPhotos} setPhotos={setSafetyPhotos} title="안전시설 인건비 증빙 사진 업로드" />
+
+            {/* Labor Photos in Setup Tab for Transfer */}
+            <PhotoLedger
+              photos={laborPhotos}
+              setPhotos={setLaborPhotos}
+              title="유도원 및 감시자 인건비 증빙 사진"
+              categoryOptions={laborWorkerRoles}
+            />
+
+            {/* Photo Transfer Divider */}
+            <div className="flex items-center gap-4 no-print">
+              <div className="flex-1 h-px bg-slate-200"></div>
+              <div className="flex flex-col items-center gap-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-500 bg-amber-50 border border-amber-200 px-4 py-2 rounded-full">
+                  <ArrowLeftRight className="w-4 h-4 text-amber-600" />
+                  <span>사진 이동</span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      if (laborPhotos.length === 0) { alert('유도원/감시자 증빙 사진이 없습니다.'); return; }
+                      if (confirm(`유도원/감시자 증빙 사진 ${laborPhotos.length}장을 모두 안전시설 증빙사진으로 이동하시겠습니까?`)) {
+                        setSafetyPhotos(prev => [...prev, ...laborPhotos]);
+                        setLaborPhotos([]);
+                      }
+                    }}
+                    className="px-3 py-1.5 text-xs font-bold bg-amber-100 text-amber-700 hover:bg-amber-200 rounded-lg border border-amber-200 transition-colors"
+                  >
+                    전체 → 안전시설로
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (safetyPhotos.length === 0) { alert('안전시설 증빙 사진이 없습니다.'); return; }
+                      if (confirm(`안전시설 증빙 사진 ${safetyPhotos.length}장을 모두 유도원/감시자 증빙사진으로 이동하시겠습니까?`)) {
+                        setLaborPhotos(prev => [...prev, ...safetyPhotos]);
+                        setSafetyPhotos([]);
+                      }
+                    }}
+                    className="px-3 py-1.5 text-xs font-bold bg-amber-100 text-amber-700 hover:bg-amber-200 rounded-lg border border-amber-200 transition-colors"
+                  >
+                    ← 유도원으로 전체
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 h-px bg-slate-200"></div>
+            </div>
+
+            <PhotoLedger
+              photos={safetyPhotos}
+              setPhotos={setSafetyPhotos}
+              title="안전시설 인건비 증빙 사진"
+              categoryOptions={safetyWorkerRoles}
+            />
             
             <div className="bg-gradient-to-r from-indigo-50 to-white p-6 rounded-2xl border border-indigo-100 text-sm text-indigo-900 flex items-start gap-4 shadow-sm">
               <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600 shrink-0">
@@ -1109,7 +1243,7 @@ function App() {
                           </div>
                           <div className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
                             <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">2</div>
-                            <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">안전시설 인건비 (품목)</div>
+                            <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">안전시설 재료비</div>
                             <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{totalMaterialCost.toLocaleString()}</div>
                             <div className="col-span-2 p-2 text-xs text-slate-500">첨부 1 참조</div>
                           </div>

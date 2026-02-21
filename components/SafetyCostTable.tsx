@@ -38,7 +38,7 @@ export const SafetyCostTable: React.FC<Props> = ({ items, setItems, readOnly = f
       <div className="mb-8 break-inside-avoid">
         <h3 className="text-lg font-bold mb-3 flex items-center gap-2 text-slate-800">
           <span className="w-1.5 h-6 bg-slate-800 inline-block rounded-sm"></span>
-          2. 안전시설 인건비 집행 상세 내역
+          2. 안전시설 재료비 집행 상세 내역
         </h3>
         
         <div className="border border-slate-400 text-xs">
@@ -93,7 +93,7 @@ export const SafetyCostTable: React.FC<Props> = ({ items, setItems, readOnly = f
           <div className="bg-orange-100 p-2 rounded-xl text-orange-600">
              <ShoppingCart className="w-5 h-5" />
           </div>
-          안전시설 인건비 내역
+          안전시설 재료비
         </h2>
         <button
           onClick={addItem}
@@ -192,13 +192,13 @@ export const SafetyCostTable: React.FC<Props> = ({ items, setItems, readOnly = f
         {items.length === 0 && (
           <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
              <p className="font-medium">등록된 품목이 없습니다.</p>
-             <p className="text-xs mt-1">'품목 추가' 버튼을 눌러 안전시설 인건비 내역을 입력하세요.</p>
+             <p className="text-xs mt-1">'품목 추가' 버튼을 눌러 안전시설 재료비 내역을 입력하세요.</p>
           </div>
         )}
       </div>
 
       <div className="mt-6 flex justify-end items-center gap-3 border-t border-slate-100 pt-4">
-         <span className="text-sm font-bold text-slate-500">안전시설 인건비 합계</span>
+         <span className="text-sm font-bold text-slate-500">안전시설 재료비 합계</span>
          <span className="text-2xl font-extrabold text-indigo-700">{totalAmount.toLocaleString()} 원</span>
       </div>
     </div>
