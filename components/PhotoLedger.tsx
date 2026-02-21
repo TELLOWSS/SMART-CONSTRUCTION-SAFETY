@@ -7,9 +7,10 @@ interface Props {
   photos: PhotoEvidence[];
   setPhotos: React.Dispatch<React.SetStateAction<PhotoEvidence[]>>;
   readOnly?: boolean;
+  title?: string;
 }
 
-export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = false }) => {
+export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = false, title }) => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Image Compression Utility (Duplicated for component isolation, in a real app would be a shared util)
@@ -154,7 +155,7 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
       <div className="mt-8">
         <h3 className="text-lg font-bold mb-3 flex items-center gap-2 text-slate-800">
           <span className="w-1.5 h-6 bg-slate-800 inline-block rounded-sm"></span>
-          3. 산업안전보건관리비 항목별 증빙 사진대지
+          {title || "3. 산업안전보건관리비 항목별 증빙 사진대지"}
         </h3>
         {/* Improved Border Logic: Container has Top/Left, Items have Right/Bottom */}
         <div className="grid grid-cols-2 gap-0 border-t border-l border-slate-400">
@@ -206,7 +207,7 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
           <div className="bg-rose-100 p-2 rounded-xl text-rose-600">
             <Camera className="w-5 h-5" />
           </div>
-          증빙 사진 업로드
+          {title || "증빙 사진 업로드"}
         </h2>
         <label className={`cursor-pointer bg-slate-900 hover:bg-black text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-md active:scale-95 ${isProcessing ? 'opacity-70 cursor-wait' : ''}`}>
           {isProcessing ? <Loader2 className="w-4 h-4 animate-spin"/> : <ImagePlus className="w-4 h-4" />}

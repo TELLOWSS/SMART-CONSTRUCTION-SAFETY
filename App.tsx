@@ -43,7 +43,8 @@ function App() {
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [attendance, setAttendance] = useState<DailyAttendance>({});
   const [safetyItems, setSafetyItems] = useState<SafetyItem[]>([]);
-  const [photos, setPhotos] = useState<PhotoEvidence[]>([]);
+  const [laborPhotos, setLaborPhotos] = useState<PhotoEvidence[]>([]);
+  const [safetyPhotos, setSafetyPhotos] = useState<PhotoEvidence[]>([]);
   const [currentTime, setCurrentTime] = useState<string>('');
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [backupProgress, setBackupProgress] = useState(0);
@@ -80,7 +81,7 @@ function App() {
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       // Only trigger if there is some data
-      if (workers.length > 0 || photos.length > 0 || safetyItems.length > 0) {
+      if (workers.length > 0 || laborPhotos.length > 0 || safetyPhotos.length > 0 || safetyItems.length > 0) {
         e.preventDefault();
         e.returnValue = ''; // Standard for Chrome/Firefox
       }
@@ -88,7 +89,7 @@ function App() {
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [workers, photos, safetyItems]);
+  }, [workers, laborPhotos, safetyPhotos, safetyItems]);
 
   // --- Auto-Save & Restore Logic ---
   
@@ -252,52 +253,62 @@ function App() {
       projectInfo.companyName || 
       workers.length > 0 || 
       safetyItems.length > 0 || 
-      photos.length > 0;
+      laborPhotos.length > 0 ||
+      safetyPhotos.length > 0;
 
     if (!hasData) {
         alert("저장할 데이터가 없습니다. 기본 설정 정보를 입력하거나 사진을 추가해주세요.");
         return;
     }
 
-    if (!confirm(`현재 작성 중인 데이터를 파일(JSON)로 저장하시겠습니까?\n\n- 공사명: ${projectInfo.siteName || '(미입력)'}\n- 근로자: ${workers.length}명\n- 사진: ${photos.length}장\n\n(사진 용량에 따라 시간이 소요될 수 있습니다)`)) return;
+    if (!confirm(`현재 작성 중인 데이터를 파일(JSON)로 저장하시겠습니까?\n\n- 공사명: ${projectInfo.siteName || '(미입력)'}\n- 근로자: ${workers.length}명\n- 유도원/감시자 증빙 사진: ${laborPhotos.length}장\n- 안전시설 증빙 사진: ${safetyPhotos.length}장\n\n(사진 용량에 따라 시간이 소요될 수 있습니다)`)) return;
 
     setIsBackingUp(true);
     setBackupProgress(0);
 
     try {
-      // 1. Convert Photos: Handle Blob URLs to Base64 (청크 단위 처리로 메모리 효율)
-      const photosWithBase64 = await processInChunks(
-        photos,
-        async (p) => {
-          // If it's already a data URL (base64) or empty, return as is
-          if (!p.fileUrl || p.fileUrl.startsWith('data:')) return p;
-          
-          try {
-            // Fetch the blob data from the blob: URL
-            const response = await fetch(p.fileUrl);
-            if (!response.ok) {
-              console.warn(`사진 ${p.id} 로드 실패 (HTTP ${response.status})`);
-              return { ...p, fileUrl: '' }; 
-            }
-            
-            const blob = await response.blob();
-            const base64 = await blobToBase64Optimized(blob);
-            return { ...p, fileUrl: base64 };
-          } catch (e) {
-            console.error(`사진 내보내기 실패 ${p.id}`, e);
-            return { ...p, fileUrl: '' }; 
+      // Helper for converting a single photo's blob URL to base64
+      const convertPhotoToBase64 = async (p: PhotoEvidence): Promise<PhotoEvidence> => {
+        if (!p.fileUrl || p.fileUrl.startsWith('data:')) return p;
+        try {
+          const response = await fetch(p.fileUrl);
+          if (!response.ok) {
+            console.warn(`사진 ${p.id} 로드 실패 (HTTP ${response.status})`);
+            return { ...p, fileUrl: '' };
           }
-        },
+          const blob = await response.blob();
+          const base64 = await blobToBase64Optimized(blob);
+          return { ...p, fileUrl: base64 };
+        } catch (e) {
+          console.error(`사진 내보내기 실패 ${p.id}`, e);
+          return { ...p, fileUrl: '' };
+        }
+      };
+
+      // 1. Convert laborPhotos: Handle Blob URLs to Base64 (청크 단위 처리로 메모리 효율)
+      const laborPhotosWithBase64 = await processInChunks(
+        laborPhotos,
+        convertPhotoToBase64,
         5, // 청크 크기: 5개씩
         (current, total) => {
-          setBackupProgress(Math.round((current / total) * 100));
+          setBackupProgress(Math.round((current / total) * 50));
         }
       );
 
-      // 사진 통계 계산
+      // 2. Convert safetyPhotos
+      const safetyPhotosWithBase64 = await processInChunks(
+        safetyPhotos,
+        convertPhotoToBase64,
+        5,
+        (current, total) => {
+          if (total > 0) setBackupProgress(50 + Math.round((current / total) * 50));
+        }
+      );
+
+      // 사진 통계 계산 (전체 합산)
+      const allPhotosForStats = [...laborPhotosWithBase64, ...safetyPhotosWithBase64].filter(p => p.fileUrl);
       const photoStats = getPhotoStats(
-        photosWithBase64
-          .filter(p => p.fileUrl)
+        allPhotosForStats
           .map(p => ({
             id: p.id,
             filename: p.category,
@@ -310,7 +321,7 @@ function App() {
       );
 
       const backupData = {
-        version: "1.2",
+        version: "1.3",
         date: new Date().toISOString(),
         appVersion: "1.0",
         photoStats: {
@@ -325,7 +336,8 @@ function App() {
           workers,
           attendance,
           safetyItems,
-          photos: photosWithBase64
+          laborPhotos: laborPhotosWithBase64,
+          safetyPhotos: safetyPhotosWithBase64
         }
       };
 
@@ -355,7 +367,9 @@ function App() {
         URL.revokeObjectURL(url);
       }, 100);
 
-      alert(`✅ 백업이 완료되었습니다.\n파일 크기: ${(blob.size / 1024 / 1024).toFixed(1)}MB\n사진: ${photosWithBase64.filter(p => p.fileUrl).length}/${photos.length}장`);
+      const laborSaved = laborPhotosWithBase64.filter(p => p.fileUrl).length;
+      const safetySaved = safetyPhotosWithBase64.filter(p => p.fileUrl).length;
+      alert(`✅ 백업이 완료되었습니다.\n파일 크기: ${(blob.size / 1024 / 1024).toFixed(1)}MB\n유도원/감시자 사진: ${laborSaved}/${laborPhotos.length}장\n안전시설 사진: ${safetySaved}/${safetyPhotos.length}장`);
 
     } catch (error) {
       console.error("Backup failed", error);
@@ -418,7 +432,10 @@ function App() {
             // --- 섹션별 선택 복구 ---
             const backupWorkerCount = Array.isArray(parsed.data.workers) ? parsed.data.workers.length : 0;
             const backupSafetyCount = Array.isArray(parsed.data.safetyItems) ? parsed.data.safetyItems.length : 0;
-            const backupPhotoCount = Array.isArray(parsed.data.photos) ? parsed.data.photos.length : 0;
+            // 이전 버전 호환: laborPhotos가 없으면 photos를 사용
+            const backupLaborPhotoCount = Array.isArray(parsed.data.laborPhotos) ? parsed.data.laborPhotos.length :
+                                          (Array.isArray(parsed.data.photos) ? parsed.data.photos.length : 0);
+            const backupSafetyPhotoCount = Array.isArray(parsed.data.safetyPhotos) ? parsed.data.safetyPhotos.length : 0;
             const backupSiteName = parsed.data.projectInfo?.siteName || '미입력';
 
             // 유도원/감시자 인건비 섹션 복구 여부
@@ -426,8 +443,9 @@ function App() {
               `[1/2] 유도원 및 감시자 인건비 복구\n\n` +
               `백업 파일 정보:\n` +
               `• 공사명: ${backupSiteName}\n` +
-              `• 근로자: ${backupWorkerCount}명\n\n` +
-              `현장 기본 정보와 유도원/감시자 인건비(근로자·출역 기록)를\n` +
+              `• 근로자: ${backupWorkerCount}명\n` +
+              `• 증빙 사진: ${backupLaborPhotoCount}장\n\n` +
+              `현장 기본 정보와 유도원/감시자 인건비(근로자·출역 기록·증빙 사진)를\n` +
               `이 백업 파일로 복구하시겠습니까?\n\n` +
               `(취소: 현재 데이터 유지)`
             );
@@ -437,8 +455,8 @@ function App() {
               `[2/2] 안전시설 인건비 복구\n\n` +
               `백업 파일 정보:\n` +
               `• 안전시설 품목: ${backupSafetyCount}개\n` +
-              `• 사진: ${backupPhotoCount}장\n\n` +
-              `안전시설 인건비 내역과 사진을\n` +
+              `• 증빙 사진: ${backupSafetyPhotoCount}장\n\n` +
+              `안전시설 인건비 내역과 증빙 사진을\n` +
               `이 백업 파일로 복구하시겠습니까?\n\n` +
               `(취소: 현재 데이터 유지)`
             );
@@ -448,12 +466,15 @@ function App() {
               return;
             }
 
-            // Clean up existing blob URLs only if photos section is being restored
+            // Clean up existing blob URLs for each section being restored
+            if (restoreLabor) {
+              laborPhotos.forEach(p => {
+                if (p.fileUrl && p.fileUrl.startsWith('blob:')) URL.revokeObjectURL(p.fileUrl);
+              });
+            }
             if (restoreSafety) {
-              photos.forEach(p => {
-                if (p.fileUrl && p.fileUrl.startsWith('blob:')) {
-                  URL.revokeObjectURL(p.fileUrl);
-                }
+              safetyPhotos.forEach(p => {
+                if (p.fileUrl && p.fileUrl.startsWith('blob:')) URL.revokeObjectURL(p.fileUrl);
               });
             }
 
@@ -465,17 +486,26 @@ function App() {
               });
               setWorkers(Array.isArray(parsed.data.workers) ? parsed.data.workers : []);
               setAttendance(parsed.data.attendance && typeof parsed.data.attendance === 'object' ? parsed.data.attendance : {});
+              // 이전 버전 호환: laborPhotos가 없으면 photos 사용
+              restorePhotosWithValidation(
+                Array.isArray(parsed.data.laborPhotos) ? parsed.data.laborPhotos :
+                (Array.isArray(parsed.data.photos) ? parsed.data.photos : []),
+                setLaborPhotos
+              );
             }
 
             if (restoreSafety) {
               setSafetyItems(Array.isArray(parsed.data.safetyItems) ? parsed.data.safetyItems : []);
-              // 사진 복구 - 안전하게 청크 단위로 처리
-              restorePhotosWithValidation(parsed.data.photos || []);
+              // 안전시설 증빙 사진 복구
+              restorePhotosWithValidation(
+                Array.isArray(parsed.data.safetyPhotos) ? parsed.data.safetyPhotos : [],
+                setSafetyPhotos
+              );
             }
 
             const restoredSections: string[] = [];
-            if (restoreLabor) restoredSections.push(`유도원/감시자 인건비 (근로자 ${backupWorkerCount}명)`);
-            if (restoreSafety) restoredSections.push(`안전시설 인건비 (품목 ${backupSafetyCount}개, 사진 ${backupPhotoCount}장)`);
+            if (restoreLabor) restoredSections.push(`유도원/감시자 인건비 (근로자 ${backupWorkerCount}명, 사진 ${backupLaborPhotoCount}장)`);
+            if (restoreSafety) restoredSections.push(`안전시설 인건비 (품목 ${backupSafetyCount}개, 사진 ${backupSafetyPhotoCount}장)`);
             alert(`✅ 복구가 완료되었습니다.\n\n복구된 항목:\n${restoredSections.map(s => `• ${s}`).join('\n')}`);
           }
         } catch (error) {
@@ -495,7 +525,10 @@ function App() {
   };
 
   // 사진 복구 - 추가된 안전성 검증
-  const restorePhotosWithValidation = async (photosToRestore: PhotoEvidence[]) => {
+  const restorePhotosWithValidation = async (
+    photosToRestore: PhotoEvidence[],
+    setPhotosFn: React.Dispatch<React.SetStateAction<PhotoEvidence[]>>
+  ) => {
     const restoredPhotos: PhotoEvidence[] = [];
     const failedPhotos: string[] = [];
 
@@ -544,7 +577,7 @@ function App() {
       await new Promise(resolve => setTimeout(resolve, 10));
     }
 
-    setPhotos(restoredPhotos);
+    setPhotosFn(restoredPhotos);
 
     // 복구 결과 알림
     if (failedPhotos.length > 0) {
@@ -558,8 +591,13 @@ function App() {
     if (confirm("현재 등록된 '근로자'와 '현장 정보'는 유지하고,\n'일일 출역'과 '사진'만 초기화하여 새로운 달을 시작하시겠습니까?")) {
         // Clear daily log data
         setAttendance({});
-        setPhotos(prev => {
-            // Revoke URLs to avoid leaks
+        setLaborPhotos(prev => {
+            prev.forEach(p => {
+                if (p.fileUrl && p.fileUrl.startsWith('blob:')) URL.revokeObjectURL(p.fileUrl);
+            });
+            return [];
+        });
+        setSafetyPhotos(prev => {
             prev.forEach(p => {
                 if (p.fileUrl && p.fileUrl.startsWith('blob:')) URL.revokeObjectURL(p.fileUrl);
             });
@@ -590,10 +628,11 @@ function App() {
   const handleReset = () => {
     if (confirm("모든 데이터를 완전히 삭제하고 초기화하시겠습니까?\n(이 작업은 되돌릴 수 없습니다)")) {
       // Critical: Revoke all object URLs to free memory
-      photos.forEach(p => {
-        if (p.fileUrl && p.fileUrl.startsWith('blob:')) {
-          URL.revokeObjectURL(p.fileUrl);
-        }
+      laborPhotos.forEach(p => {
+        if (p.fileUrl && p.fileUrl.startsWith('blob:')) URL.revokeObjectURL(p.fileUrl);
+      });
+      safetyPhotos.forEach(p => {
+        if (p.fileUrl && p.fileUrl.startsWith('blob:')) URL.revokeObjectURL(p.fileUrl);
       });
 
       setProjectInfo({
@@ -603,7 +642,8 @@ function App() {
       setWorkers([]);
       setAttendance({});
       setSafetyItems([]);
-      setPhotos([]);
+      setLaborPhotos([]);
+      setSafetyPhotos([]);
       
       // Also clear local storage draft
       localStorage.removeItem(DRAFT_KEY);
@@ -616,7 +656,7 @@ function App() {
   const totalLaborCost = workers.reduce((acc, curr) => acc + (curr.daysWorked * curr.dailyRate), 0);
   const totalMaterialCost = safetyItems.reduce((acc, curr) => acc + (curr.quantity * curr.unitPrice), 0);
   const totalCost = totalLaborCost + totalMaterialCost;
-  const totalPhotos = photos.length;
+  const totalPhotos = laborPhotos.length + safetyPhotos.length;
 
   const formatDateToKorean = (dateStr: string) => {
     if (!dateStr) return '';
@@ -817,6 +857,7 @@ function App() {
             <ProjectHeader info={projectInfo} onChange={setProjectInfo} />
             <LaborCostTable workers={workers} setWorkers={setWorkers} />
             <SafetyCostTable items={safetyItems} setItems={setSafetyItems} />
+            <PhotoLedger photos={safetyPhotos} setPhotos={setSafetyPhotos} title="안전시설 인건비 증빙 사진 업로드" />
             
             <div className="bg-gradient-to-r from-indigo-50 to-white p-6 rounded-2xl border border-indigo-100 text-sm text-indigo-900 flex items-start gap-4 shadow-sm">
               <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600 shrink-0">
@@ -849,8 +890,8 @@ function App() {
             workers={workers}
             attendance={attendance}
             setAttendance={setAttendance}
-            photos={photos}
-            setPhotos={setPhotos}
+            photos={laborPhotos}
+            setPhotos={setLaborPhotos}
             year={projectInfo.year}
             month={projectInfo.month}
           />
@@ -1118,8 +1159,8 @@ function App() {
               </div>
             )}
 
-            {/* ===== 첨부 2: 항목별 증빙사진대지 (Attachment) ===== */}
-            <div className="bg-white shadow-2xl max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm">
+            {/* ===== 첨부 2: 유도원 및 감시자 인건비 증빙 사진대지 (Attachment 2 – Labor) ===== */}
+            <div className="bg-white shadow-2xl max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm print:break-after-page">
               <div className="p-[10mm] md:p-[15mm]">
                 <div className="border-2 border-slate-900 p-1">
                   <div className="border border-slate-600 p-8">
@@ -1127,11 +1168,28 @@ function App() {
                       <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 첨 부 2 】</p>
                       <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {projectInfo.year}년 {projectInfo.month}월</p>
                     </div>
-                    <PhotoLedger photos={photos} setPhotos={setPhotos} readOnly />
+                    <PhotoLedger photos={laborPhotos} setPhotos={setLaborPhotos} readOnly title="2. 유도원 및 감시자 인건비 증빙 사진대지" />
                   </div>
                 </div>
               </div>
             </div>
+
+            {/* ===== 첨부 2 (갑지 2 소속): 안전시설 인건비 증빙 사진대지 (Attachment 2 – Safety) ===== */}
+            {showSafetyCost && (
+              <div className="bg-white shadow-2xl max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm">
+                <div className="p-[10mm] md:p-[15mm]">
+                  <div className="border-2 border-slate-900 p-1">
+                    <div className="border border-slate-600 p-8">
+                      <div className="border-b-2 border-slate-900 pb-3 mb-6 text-center break-inside-avoid">
+                        <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 첨 부 2 】</p>
+                        <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {projectInfo.year}년 {projectInfo.month}월</p>
+                      </div>
+                      <PhotoLedger photos={safetyPhotos} setPhotos={setSafetyPhotos} readOnly title="2. 안전시설 인건비 증빙 사진대지" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
