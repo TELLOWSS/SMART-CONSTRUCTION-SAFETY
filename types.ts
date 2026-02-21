@@ -77,3 +77,7 @@ export const PHOTO_CATEGORIES = [
   "위험성평가 회의",
   "낙하물 방지망 조치"
 ];
+
+export type CompressionResult =
+  | { success: true; blob: Blob; file: File }
+  | { success: false; error: unknown; file: File };
