@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { PhotoEvidence, PHOTO_CATEGORIES, CompressionResult } from '../types';
-import { ImagePlus, MapPin, Calendar, X, Camera, Loader2 } from 'lucide-react';
+import { ImagePlus, MapPin, Calendar, X, Camera, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface Props {
   photos: PhotoEvidence[];
@@ -13,6 +13,7 @@ interface Props {
 
 export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = false, title, categoryOptions }) => {
   const [isProcessing, setIsProcessing] = useState(false);
+  const [sectionCollapsed, setSectionCollapsed] = useState(false);
 
   // Image Compression Utility (Duplicated for component isolation, in a real app would be a shared util)
   const compressImage = (file: File): Promise<Blob> => {
@@ -205,22 +206,27 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
   }
 
   return (
-    <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 mb-8 no-print hover:shadow-md transition-shadow">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold flex items-center gap-3 text-slate-800">
-          <div className="bg-rose-100 p-2 rounded-xl text-rose-600">
+    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 mb-8 no-print hover:shadow-md transition-shadow">
+      <div className="flex justify-between items-center p-8 pb-6">
+        <button
+          onClick={() => setSectionCollapsed(!sectionCollapsed)}
+          className="flex items-center gap-3 text-left flex-1 min-w-0"
+        >
+          <div className="bg-rose-100 p-2 rounded-xl text-rose-600 shrink-0">
             <Camera className="w-5 h-5" />
           </div>
-          {title || "증빙 사진 업로드"}
-        </h2>
-        <label className={`cursor-pointer bg-slate-900 hover:bg-black text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-md active:scale-95 ${isProcessing ? 'opacity-70 cursor-wait' : ''}`}>
+          <h2 className="text-xl font-bold text-slate-800">{title || "증빙 사진 업로드"}</h2>
+          {sectionCollapsed ? <ChevronDown className="w-5 h-5 text-slate-400 shrink-0" /> : <ChevronUp className="w-5 h-5 text-slate-400 shrink-0" />}
+        </button>
+        <label className={`ml-4 cursor-pointer bg-slate-900 hover:bg-black text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-md active:scale-95 ${isProcessing ? 'opacity-70 cursor-wait' : ''}`}>
           {isProcessing ? <Loader2 className="w-4 h-4 animate-spin"/> : <ImagePlus className="w-4 h-4" />}
           {isProcessing ? '처리중...' : '사진 파일 추가'}
           <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} disabled={isProcessing} multiple />
         </label>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {!sectionCollapsed && (
+      <div className="px-8 pb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {photos.map((photo) => (
           <div key={photo.id} className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group">
             <div className="aspect-video w-full bg-slate-100 relative border-b border-slate-100">
@@ -303,6 +309,7 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
           </div>
         )}
       </div>
+      )}
     </div>
   );
 };

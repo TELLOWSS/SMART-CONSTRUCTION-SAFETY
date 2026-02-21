@@ -1,7 +1,7 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { SafetyItem } from '../types';
-import { Plus, Trash2, ShoppingCart, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, ShoppingCart, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface Props {
   items: SafetyItem[];
@@ -10,6 +10,8 @@ interface Props {
 }
 
 export const SafetyCostTable: React.FC<Props> = ({ items, setItems, readOnly = false }) => {
+  const [sectionCollapsed, setSectionCollapsed] = useState(false);
+
   const addItem = () => {
     const newItem: SafetyItem = {
       id: crypto.randomUUID(),
@@ -87,24 +89,29 @@ export const SafetyCostTable: React.FC<Props> = ({ items, setItems, readOnly = f
 
   // Edit Mode
   return (
-    <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 mb-8 no-print hover:shadow-md transition-shadow">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold flex items-center gap-3 text-slate-800">
-          <div className="bg-orange-100 p-2 rounded-xl text-orange-600">
+    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 mb-8 no-print hover:shadow-md transition-shadow">
+      <div className="flex justify-between items-center p-8 pb-6">
+        <button
+          onClick={() => setSectionCollapsed(!sectionCollapsed)}
+          className="flex items-center gap-3 text-left flex-1 min-w-0"
+        >
+          <div className="bg-orange-100 p-2 rounded-xl text-orange-600 shrink-0">
              <ShoppingCart className="w-5 h-5" />
           </div>
-          안전시설 재료비 내역
-        </h2>
+          <h2 className="text-xl font-bold text-slate-800">안전시설 재료비 내역</h2>
+          {sectionCollapsed ? <ChevronDown className="w-5 h-5 text-slate-400 shrink-0" /> : <ChevronUp className="w-5 h-5 text-slate-400 shrink-0" />}
+        </button>
         <button
           onClick={addItem}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-md hover:shadow-lg active:scale-95"
+          className="ml-4 flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-md hover:shadow-lg active:scale-95"
         >
           <Plus className="w-4 h-4" />
           품목 추가
         </button>
       </div>
 
-      <div className="space-y-3">
+      {!sectionCollapsed && (
+      <div className="px-8 pb-8 space-y-3">
         {/* Header for Edit Mode */}
         <div className="hidden md:grid grid-cols-12 gap-4 px-4 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
             <div className="col-span-3">품명</div>
@@ -195,12 +202,13 @@ export const SafetyCostTable: React.FC<Props> = ({ items, setItems, readOnly = f
              <p className="text-xs mt-1">'품목 추가' 버튼을 눌러 안전시설 재료비 내역을 입력하세요.</p>
           </div>
         )}
-      </div>
 
-      <div className="mt-6 flex justify-end items-center gap-3 border-t border-slate-100 pt-4">
-         <span className="text-sm font-bold text-slate-500">안전시설 재료비 합계</span>
-         <span className="text-2xl font-extrabold text-indigo-700">{totalAmount.toLocaleString()} 원</span>
+        <div className="flex justify-end items-center gap-3 border-t border-slate-100 pt-4 mt-2">
+           <span className="text-sm font-bold text-slate-500">안전시설 재료비 합계</span>
+           <span className="text-2xl font-extrabold text-indigo-700">{totalAmount.toLocaleString()} 원</span>
+        </div>
       </div>
+      )}
     </div>
   );
 };
