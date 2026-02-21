@@ -42,6 +42,8 @@ function App() {
   const [projectInfo, setProjectInfo] = useState<ProjectInfo>(INITIAL_PROJECT_INFO);
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [attendance, setAttendance] = useState<DailyAttendance>({});
+  const [safetyWorkers, setSafetyWorkers] = useState<Worker[]>([]);
+  const [safetyAttendance, setSafetyAttendance] = useState<DailyAttendance>({});
   const [safetyItems, setSafetyItems] = useState<SafetyItem[]>([]);
   const [laborPhotos, setLaborPhotos] = useState<PhotoEvidence[]>([]);
   const [safetyPhotos, setSafetyPhotos] = useState<PhotoEvidence[]>([]);
@@ -81,7 +83,7 @@ function App() {
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       // Only trigger if there is some data
-      if (workers.length > 0 || laborPhotos.length > 0 || safetyPhotos.length > 0 || safetyItems.length > 0) {
+      if (workers.length > 0 || safetyWorkers.length > 0 || laborPhotos.length > 0 || safetyPhotos.length > 0 || safetyItems.length > 0) {
         e.preventDefault();
         e.returnValue = ''; // Standard for Chrome/Firefox
       }
@@ -89,7 +91,7 @@ function App() {
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [workers, laborPhotos, safetyPhotos, safetyItems]);
+  }, [workers, safetyWorkers, laborPhotos, safetyPhotos, safetyItems]);
 
   // --- Auto-Save & Restore Logic ---
   
@@ -101,6 +103,7 @@ function App() {
         projectInfo.siteName || 
         projectInfo.managerName || // Track manager name changes too
         workers.length > 0 || 
+        safetyWorkers.length > 0 ||
         safetyItems.length > 0 || 
         Object.keys(attendance).length > 0
       ) {
@@ -108,6 +111,8 @@ function App() {
           projectInfo,
           workers,
           attendance,
+          safetyWorkers,
+          safetyAttendance,
           safetyItems,
           // Note: Photos are excluded because LocalStorage has 5MB limit and blob URLs are not persistent
           updatedAt: new Date().getTime()
@@ -117,7 +122,7 @@ function App() {
     }, 1000); // Debounce 1s
 
     return () => clearTimeout(timer);
-  }, [projectInfo, workers, attendance, safetyItems]);
+  }, [projectInfo, workers, attendance, safetyWorkers, safetyAttendance, safetyItems]);
 
   // 2. Check for draft on mount
   useEffect(() => {
@@ -133,6 +138,8 @@ function App() {
                     setProjectInfo(parsed.projectInfo);
                     setWorkers(parsed.workers || []);
                     setAttendance(parsed.attendance || {});
+                    setSafetyWorkers(parsed.safetyWorkers || []);
+                    setSafetyAttendance(parsed.safetyAttendance || {});
                     setSafetyItems(parsed.safetyItems || []);
                     setActiveTab('setup'); // Move to setup tab
                 } else {
@@ -160,6 +167,19 @@ function App() {
       })
     );
   }, [attendance]);
+
+  // Calculate daysWorked for safety workers from safetyAttendance
+  useEffect(() => {
+    setSafetyWorkers(prevWorkers =>
+      prevWorkers.map(worker => {
+        let totalDays = 0;
+        Object.values(safetyAttendance).forEach(dailyRecord => {
+          totalDays += dailyRecord[worker.id] || 0;
+        });
+        return { ...worker, daysWorked: totalDays };
+      })
+    );
+  }, [safetyAttendance]);
 
   // Validation function for required fields before report generation
   const validateBeforePrint = (): { isValid: boolean; errors: string[] } => {
@@ -252,6 +272,7 @@ function App() {
       projectInfo.safetyManagerName || 
       projectInfo.companyName || 
       workers.length > 0 || 
+      safetyWorkers.length > 0 ||
       safetyItems.length > 0 || 
       laborPhotos.length > 0 ||
       safetyPhotos.length > 0;
@@ -261,7 +282,7 @@ function App() {
         return;
     }
 
-    if (!confirm(`현재 작성 중인 데이터를 파일(JSON)로 저장하시겠습니까?\n\n- 공사명: ${projectInfo.siteName || '(미입력)'}\n- 근로자: ${workers.length}명\n- 유도원/감시자 증빙 사진: ${laborPhotos.length}장\n- 안전시설 증빙 사진: ${safetyPhotos.length}장\n\n(사진 용량에 따라 시간이 소요될 수 있습니다)`)) return;
+    if (!confirm(`현재 작성 중인 데이터를 파일(JSON)로 저장하시겠습니까?\n\n- 공사명: ${projectInfo.siteName || '(미입력)'}\n- 유도원/감시자 근로자: ${workers.length}명\n- 안전시설 근로자: ${safetyWorkers.length}명\n- 유도원/감시자 증빙 사진: ${laborPhotos.length}장\n- 안전시설 증빙 사진: ${safetyPhotos.length}장\n\n(사진 용량에 따라 시간이 소요될 수 있습니다)`)) return;
 
     setIsBackingUp(true);
     setBackupProgress(0);
@@ -335,6 +356,8 @@ function App() {
           projectInfo,
           workers,
           attendance,
+          safetyWorkers,
+          safetyAttendance,
           safetyItems,
           laborPhotos: laborPhotosWithBase64,
           safetyPhotos: safetyPhotosWithBase64
@@ -431,6 +454,7 @@ function App() {
 
             // --- 섹션별 선택 복구 ---
             const backupWorkerCount = Array.isArray(parsed.data.workers) ? parsed.data.workers.length : 0;
+            const backupSafetyWorkerCount = Array.isArray(parsed.data.safetyWorkers) ? parsed.data.safetyWorkers.length : 0;
             const backupSafetyCount = Array.isArray(parsed.data.safetyItems) ? parsed.data.safetyItems.length : 0;
             // 이전 버전 호환: laborPhotos가 없으면 photos를 사용
             const backupLaborPhotoCount = Array.isArray(parsed.data.laborPhotos) ? parsed.data.laborPhotos.length :
@@ -454,9 +478,10 @@ function App() {
             const restoreSafety = confirm(
               `[2/2] 안전시설 인건비 복구\n\n` +
               `백업 파일 정보:\n` +
+              `• 안전시설 근로자: ${backupSafetyWorkerCount}명\n` +
               `• 안전시설 품목: ${backupSafetyCount}개\n` +
               `• 증빙 사진: ${backupSafetyPhotoCount}장\n\n` +
-              `안전시설 인건비 내역과 증빙 사진을\n` +
+              `안전시설 인건비 근로자·출역 기록·품목 내역과 증빙 사진을\n` +
               `이 백업 파일로 복구하시겠습니까?\n\n` +
               `(취소: 현재 데이터 유지)`
             );
@@ -495,6 +520,8 @@ function App() {
             }
 
             if (restoreSafety) {
+              setSafetyWorkers(Array.isArray(parsed.data.safetyWorkers) ? parsed.data.safetyWorkers : []);
+              setSafetyAttendance(parsed.data.safetyAttendance && typeof parsed.data.safetyAttendance === 'object' ? parsed.data.safetyAttendance : {});
               setSafetyItems(Array.isArray(parsed.data.safetyItems) ? parsed.data.safetyItems : []);
               // 안전시설 증빙 사진 복구
               restorePhotosWithValidation(
@@ -505,7 +532,7 @@ function App() {
 
             const restoredSections: string[] = [];
             if (restoreLabor) restoredSections.push(`유도원/감시자 인건비 (근로자 ${backupWorkerCount}명, 사진 ${backupLaborPhotoCount}장)`);
-            if (restoreSafety) restoredSections.push(`안전시설 인건비 (품목 ${backupSafetyCount}개, 사진 ${backupSafetyPhotoCount}장)`);
+            if (restoreSafety) restoredSections.push(`안전시설 인건비 (근로자 ${backupSafetyWorkerCount}명, 품목 ${backupSafetyCount}개, 사진 ${backupSafetyPhotoCount}장)`);
             alert(`✅ 복구가 완료되었습니다.\n\n복구된 항목:\n${restoredSections.map(s => `• ${s}`).join('\n')}`);
           }
         } catch (error) {
@@ -591,6 +618,7 @@ function App() {
     if (confirm("현재 등록된 '근로자'와 '현장 정보'는 유지하고,\n'일일 출역'과 '사진'만 초기화하여 새로운 달을 시작하시겠습니까?")) {
         // Clear daily log data
         setAttendance({});
+        setSafetyAttendance({});
         setLaborPhotos(prev => {
             prev.forEach(p => {
                 if (p.fileUrl && p.fileUrl.startsWith('blob:')) URL.revokeObjectURL(p.fileUrl);
@@ -641,6 +669,8 @@ function App() {
       });
       setWorkers([]);
       setAttendance({});
+      setSafetyWorkers([]);
+      setSafetyAttendance({});
       setSafetyItems([]);
       setLaborPhotos([]);
       setSafetyPhotos([]);
@@ -654,8 +684,10 @@ function App() {
 
   // Calculate stats for dashboard
   const totalLaborCost = workers.reduce((acc, curr) => acc + (curr.daysWorked * curr.dailyRate), 0);
+  const totalSafetyWorkersCost = safetyWorkers.reduce((acc, curr) => acc + (curr.daysWorked * curr.dailyRate), 0);
   const totalMaterialCost = safetyItems.reduce((acc, curr) => acc + (curr.quantity * curr.unitPrice), 0);
-  const totalCost = totalLaborCost + totalMaterialCost;
+  const totalSafetyCost = totalSafetyWorkersCost + totalMaterialCost;
+  const totalCost = totalLaborCost + totalSafetyCost;
   const totalPhotos = laborPhotos.length + safetyPhotos.length;
 
   const formatDateToKorean = (dateStr: string) => {
@@ -821,7 +853,7 @@ function App() {
                     </div>
                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">인건비 합계</p>
                 </div>
-                <p className="text-2xl font-extrabold text-slate-900 mt-2 tracking-tight">{totalLaborCost.toLocaleString()} <span className="text-sm text-slate-400 font-medium">원</span></p>
+                <p className="text-2xl font-extrabold text-slate-900 mt-2 tracking-tight">{(totalLaborCost + totalSafetyWorkersCost).toLocaleString()} <span className="text-sm text-slate-400 font-medium">원</span></p>
                </div>
             </div>
              <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group">
@@ -856,6 +888,12 @@ function App() {
           <div className="space-y-8 animate-in fade-in duration-300">
             <ProjectHeader info={projectInfo} onChange={setProjectInfo} />
             <LaborCostTable workers={workers} setWorkers={setWorkers} />
+            <LaborCostTable
+              workers={safetyWorkers}
+              setWorkers={setSafetyWorkers}
+              sectionTitle="안전시설 인건비 근로자 산출 정보"
+              reportTitle="안전시설 인건비 근로자 증빙 양식"
+            />
             <SafetyCostTable items={safetyItems} setItems={setSafetyItems} />
             <PhotoLedger photos={safetyPhotos} setPhotos={setSafetyPhotos} title="안전시설 인건비 증빙 사진 업로드" />
             
@@ -894,6 +932,9 @@ function App() {
             setPhotos={setLaborPhotos}
             year={projectInfo.year}
             month={projectInfo.month}
+            safetyWorkers={safetyWorkers}
+            safetyAttendance={safetyAttendance}
+            setSafetyAttendance={setSafetyAttendance}
           />
         )}
 
@@ -1062,13 +1103,19 @@ function App() {
                           </div>
                           <div className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
                             <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">1</div>
-                            <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">안전시설 인건비</div>
+                            <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">안전시설 인건비 (근로자)</div>
+                            <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{totalSafetyWorkersCost.toLocaleString()}</div>
+                            <div className="col-span-2 p-2 text-xs text-slate-500">첨부 1 참조</div>
+                          </div>
+                          <div className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
+                            <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">2</div>
+                            <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">안전시설 인건비 (품목)</div>
                             <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{totalMaterialCost.toLocaleString()}</div>
                             <div className="col-span-2 p-2 text-xs text-slate-500">첨부 1 참조</div>
                           </div>
                           <div className="grid grid-cols-12 bg-slate-100 font-bold border-t border-slate-400 text-center items-center">
                             <div className="col-span-6 border-r border-slate-300 p-2">합 계</div>
-                            <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 text-indigo-900">{totalMaterialCost.toLocaleString()}</div>
+                            <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 text-indigo-900">{totalSafetyCost.toLocaleString()}</div>
                             <div className="col-span-2 p-2"></div>
                           </div>
                         </div>
@@ -1148,6 +1195,17 @@ function App() {
                         <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 첨 부 1 】</p>
                         <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {projectInfo.year}년 {projectInfo.month}월</p>
                       </div>
+                      {safetyWorkers.length > 0 && (
+                        <LaborCostTable
+                          workers={safetyWorkers}
+                          setWorkers={setSafetyWorkers}
+                          attendance={safetyAttendance}
+                          year={projectInfo.year}
+                          month={projectInfo.month}
+                          reportTitle="안전시설 인건비 근로자 증빙 양식"
+                          readOnly
+                        />
+                      )}
                       <SafetyCostTable 
                         items={safetyItems}
                         setItems={setSafetyItems}
