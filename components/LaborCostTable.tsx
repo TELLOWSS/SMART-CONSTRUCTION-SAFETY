@@ -1,7 +1,16 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Worker, WORKER_ROLES, DailyAttendance } from '../types';
-import { Plus, Trash2, Users, AlertCircle, CalendarDays, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, Users, AlertCircle, CalendarDays, ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown, RotateCcw } from 'lucide-react';
+
+type SortField = 'name' | 'role' | 'daysWorked' | 'dailyRate';
+
+const SORT_OPTIONS: { field: SortField; label: string }[] = [
+  { field: 'name', label: '성명' },
+  { field: 'role', label: '직종' },
+  { field: 'daysWorked', label: '출력공수' },
+  { field: 'dailyRate', label: '일 단가' },
+];
 
 interface Props {
   workers: Worker[];
@@ -21,6 +30,8 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
   // For expanding detailed input in edit mode
   const [expandedWorkerId, setExpandedWorkerId] = useState<string | null>(null);
   const [sectionCollapsed, setSectionCollapsed] = useState(false);
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const addWorker = () => {
     const newWorker: Worker = {
@@ -52,6 +63,36 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
 
   const toggleExpand = (id: string) => {
     setExpandedWorkerId(expandedWorkerId === id ? null : id);
+  };
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 opacity-40" />;
+    return sortDirection === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />;
+  };
+
+  const sortedWorkers = useMemo(() => [...workers].sort((a, b) => {
+    if (!sortField) return 0;
+    const valA = a[sortField];
+    const valB = b[sortField];
+    const cmp = typeof valA === 'string'
+      ? (valA as string).localeCompare(valB as string, 'ko')
+      : (valA as number) - (valB as number);
+    return sortDirection === 'asc' ? cmp : -cmp;
+  }), [workers, sortField, sortDirection]);
+
+  const resetAllDailyRates = () => {
+    if (confirm('모든 근로자의 일 단가를 0으로 초기화하시겠습니까?')) {
+      setWorkers(workers.map(w => ({ ...w, dailyRate: 0 })));
+    }
   };
 
   const totalCost = workers.reduce((acc, curr) => acc + (curr.daysWorked * curr.dailyRate), 0);
@@ -192,6 +233,14 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
         </button>
         <div className="flex items-center gap-2 ml-4">
           <button
+            onClick={resetAllDailyRates}
+            className="flex items-center gap-2 bg-slate-100 text-slate-600 px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-rose-50 hover:text-rose-600 transition-all border border-slate-200"
+            title="모든 근로자의 일 단가를 0으로 초기화"
+          >
+            <RotateCcw className="w-4 h-4" />
+            단가 초기화
+          </button>
+          <button
             onClick={addWorker}
             className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-md hover:shadow-lg active:scale-95"
           >
@@ -203,6 +252,33 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
 
       {!sectionCollapsed && (
       <div className="px-8 pb-8 space-y-4">
+        {/* Sort Controls */}
+        <div className="flex flex-wrap items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100">
+          <span className="text-xs font-bold text-slate-500 mr-1">정렬:</span>
+          {SORT_OPTIONS.map(({ field, label }) => (
+            <button
+              key={field}
+              onClick={() => toggleSort(field)}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                sortField === field
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'bg-white text-slate-600 border border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
+              }`}
+            >
+              {label}
+              {getSortIcon(field)}
+            </button>
+          ))}
+          {sortField && (
+            <button
+              onClick={() => { setSortField(null); setSortDirection('asc'); }}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-slate-600 transition-all"
+            >
+              초기화
+            </button>
+          )}
+        </div>
+
         {expandedWorkerId !== null && (
           <div className="flex justify-end">
             <button
@@ -214,7 +290,7 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
             </button>
           </div>
         )}
-        {workers.map(worker => (
+        {sortedWorkers.map(worker => (
           <div key={worker.id} className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm transition-all hover:border-indigo-200">
             {/* Primary Row */}
             <div className="p-4 flex flex-col md:flex-row gap-4 items-start md:items-center bg-slate-50/50">
