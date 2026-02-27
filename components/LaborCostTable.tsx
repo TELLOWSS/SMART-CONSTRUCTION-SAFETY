@@ -24,9 +24,10 @@ interface Props {
   onMoveWorker?: (workerId: string) => void; // Transfer worker to other section
   moveLabel?: string; // Label for move button e.g. "→ 안전시설로" or "← 유도원으로"
   onDeleteWorker?: (workerId: string) => void; // Override delete to allow attendance cleanup
+  onResetAttendance?: () => void; // Reset output work hours (출력공수) to zero
 }
 
-export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendance = {}, year = new Date().getFullYear(), month = new Date().getMonth() + 1, readOnly = false, sectionTitle = '유도원 및 감시자 인건비 산출 정보', reportTitle = '1. 유도원 및 감시자 인건비 제출 증빙 양식', onMoveWorker, moveLabel = '→ 이동', onDeleteWorker }) => {
+export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendance = {}, year = new Date().getFullYear(), month = new Date().getMonth() + 1, readOnly = false, sectionTitle = '유도원 및 감시자 인건비 산출 정보', reportTitle = '1. 유도원 및 감시자 인건비 제출 증빙 양식', onMoveWorker, moveLabel = '→ 이동', onDeleteWorker, onResetAttendance }) => {
   // For expanding detailed input in edit mode
   const [expandedWorkerId, setExpandedWorkerId] = useState<string | null>(null);
   const [sectionCollapsed, setSectionCollapsed] = useState(false);
@@ -92,6 +93,12 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
   const resetAllDailyRates = () => {
     if (confirm('모든 근로자의 일 단가를 0으로 초기화하시겠습니까?')) {
       setWorkers(workers.map(w => ({ ...w, dailyRate: 0 })));
+    }
+  };
+
+  const resetAttendance = () => {
+    if (onResetAttendance && confirm('모든 근로자의 출력공수(일일 출역 기록)를 0으로 초기화하시겠습니까?')) {
+      onResetAttendance();
     }
   };
 
@@ -240,6 +247,16 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
             <RotateCcw className="w-4 h-4" />
             단가 초기화
           </button>
+          {onResetAttendance && (
+            <button
+              onClick={resetAttendance}
+              className="flex items-center gap-2 bg-slate-100 text-slate-600 px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-rose-50 hover:text-rose-600 transition-all border border-slate-200"
+              title="모든 근로자의 출력공수(일일 출역 기록)를 0으로 초기화"
+            >
+              <RotateCcw className="w-4 h-4" />
+              출력공수 초기화
+            </button>
+          )}
           <button
             onClick={addWorker}
             className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-md hover:shadow-lg active:scale-95"

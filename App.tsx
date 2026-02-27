@@ -462,6 +462,8 @@ function App() {
                                           (Array.isArray(parsed.data.photos) ? parsed.data.photos.length : 0);
             const backupSafetyPhotoCount = Array.isArray(parsed.data.safetyPhotos) ? parsed.data.safetyPhotos.length : 0;
             const backupSiteName = parsed.data.projectInfo?.siteName || '미입력';
+            const backupAttendanceDays = parsed.data.attendance ? Object.keys(parsed.data.attendance).length : 0;
+            const backupSafetyAttendanceDays = parsed.data.safetyAttendance ? Object.keys(parsed.data.safetyAttendance).length : 0;
 
             // 유도원/감시자 인건비 섹션 복구 여부
             const restoreLabor = confirm(
@@ -470,9 +472,18 @@ function App() {
               `• 공사명: ${backupSiteName}\n` +
               `• 근로자: ${backupWorkerCount}명\n` +
               `• 증빙 사진: ${backupLaborPhotoCount}장\n\n` +
-              `현장 기본 정보와 유도원/감시자 인건비(근로자·출역 기록)를\n` +
+              `현장 기본 정보와 유도원/감시자 인건비(근로자 목록)를\n` +
               `이 백업 파일로 복구하시겠습니까?\n\n` +
               `(취소: 현재 데이터 유지)`
+            );
+
+            // 유도원/감시자 출력공수(일일 출역 기록) 복구 여부
+            const restoreLaborAttendance = restoreLabor && backupAttendanceDays > 0 && confirm(
+              `[1-a/2] 유도원 및 감시자 출력공수(일일 출역 기록) 복구\n\n` +
+              `• 출역 날짜 수: ${backupAttendanceDays}일\n\n` +
+              `백업 파일의 출역 기록(출력공수)도 함께 복구하시겠습니까?\n\n` +
+              `• 확인: 출력공수 포함하여 복구\n` +
+              `• 취소: 투입인력(근로자 목록)만 복구, 출력공수는 0으로 초기화`
             );
 
             // 유도원/감시자 증빙 사진 복구 여부 (투입인력 복구를 선택한 경우에만 질문)
@@ -490,9 +501,18 @@ function App() {
               `• 안전시설 근로자: ${backupSafetyWorkerCount}명\n` +
               `• 안전시설 품목: ${backupSafetyCount}개\n` +
               `• 증빙 사진: ${backupSafetyPhotoCount}장\n\n` +
-              `안전시설 인건비 근로자·출역 기록·품목 내역을\n` +
+              `안전시설 인건비 근로자 목록·품목 내역을\n` +
               `이 백업 파일로 복구하시겠습니까?\n\n` +
               `(취소: 현재 데이터 유지)`
+            );
+
+            // 안전시설 출력공수(일일 출역 기록) 복구 여부
+            const restoreSafetyAttendance = restoreSafety && backupSafetyAttendanceDays > 0 && confirm(
+              `[2-a/2] 안전시설 출력공수(일일 출역 기록) 복구\n\n` +
+              `• 출역 날짜 수: ${backupSafetyAttendanceDays}일\n\n` +
+              `백업 파일의 출역 기록(출력공수)도 함께 복구하시겠습니까?\n\n` +
+              `• 확인: 출력공수 포함하여 복구\n` +
+              `• 취소: 투입인력(근로자 목록)만 복구, 출력공수는 0으로 초기화`
             );
 
             // 안전시설 증빙 사진 복구 여부 (투입인력 복구를 선택한 경우에만 질문)
@@ -527,7 +547,12 @@ function App() {
                 ...parsed.data.projectInfo
               });
               setWorkers(Array.isArray(parsed.data.workers) ? parsed.data.workers : []);
-              setAttendance(parsed.data.attendance && typeof parsed.data.attendance === 'object' ? parsed.data.attendance : {});
+              // 출력공수(일일 출역 기록) 복구 여부에 따라 조건부 처리
+              if (restoreLaborAttendance) {
+                setAttendance(parsed.data.attendance && typeof parsed.data.attendance === 'object' ? parsed.data.attendance : {});
+              } else {
+                setAttendance({});
+              }
               // 이전 버전 호환: laborPhotos가 없으면 photos 사용
               if (restoreLaborPhotos) {
                 restorePhotosWithValidation(
@@ -540,7 +565,12 @@ function App() {
 
             if (restoreSafety) {
               setSafetyWorkers(Array.isArray(parsed.data.safetyWorkers) ? parsed.data.safetyWorkers : []);
-              setSafetyAttendance(parsed.data.safetyAttendance && typeof parsed.data.safetyAttendance === 'object' ? parsed.data.safetyAttendance : {});
+              // 출력공수(일일 출역 기록) 복구 여부에 따라 조건부 처리
+              if (restoreSafetyAttendance) {
+                setSafetyAttendance(parsed.data.safetyAttendance && typeof parsed.data.safetyAttendance === 'object' ? parsed.data.safetyAttendance : {});
+              } else {
+                setSafetyAttendance({});
+              }
               setSafetyItems(Array.isArray(parsed.data.safetyItems) ? parsed.data.safetyItems : []);
               // 안전시설 증빙 사진 복구
               if (restoreSafetyPhotos) {
@@ -552,8 +582,8 @@ function App() {
             }
 
             const restoredSections: string[] = [];
-            if (restoreLabor) restoredSections.push(`유도원/감시자 인건비 (근로자 ${backupWorkerCount}명${restoreLaborPhotos ? `, 사진 ${backupLaborPhotoCount}장` : ', 사진 제외'})`);
-            if (restoreSafety) restoredSections.push(`안전시설 인건비 (근로자 ${backupSafetyWorkerCount}명, 품목 ${backupSafetyCount}개${restoreSafetyPhotos ? `, 사진 ${backupSafetyPhotoCount}장` : ', 사진 제외'})`);
+            if (restoreLabor) restoredSections.push(`유도원/감시자 인건비 (근로자 ${backupWorkerCount}명${restoreLaborAttendance ? `, 출역 날짜 ${backupAttendanceDays}일` : ', 출력공수 초기화'}${restoreLaborPhotos ? `, 사진 ${backupLaborPhotoCount}장` : ', 사진 제외'})`);
+            if (restoreSafety) restoredSections.push(`안전시설 인건비 (근로자 ${backupSafetyWorkerCount}명, 품목 ${backupSafetyCount}개${restoreSafetyAttendance ? `, 출역 날짜 ${backupSafetyAttendanceDays}일` : ', 출력공수 초기화'}${restoreSafetyPhotos ? `, 사진 ${backupSafetyPhotoCount}장` : ', 사진 제외'})`);
             alert(`✅ 복구가 완료되었습니다.\n\n복구된 항목:\n${restoredSections.map(s => `• ${s}`).join('\n')}`);
           }
         } catch (error) {
@@ -1010,6 +1040,7 @@ function App() {
               onMoveWorker={moveWorkerToSafety}
               moveLabel="→ 안전시설로 이동"
               onDeleteWorker={deleteWorkerFromLabor}
+              onResetAttendance={() => setAttendance({})}
             />
 
             {/* Worker Transfer Divider */}
@@ -1030,6 +1061,7 @@ function App() {
               onMoveWorker={moveWorkerToLabor}
               moveLabel="← 유도원으로 이동"
               onDeleteWorker={deleteWorkerFromSafety}
+              onResetAttendance={() => setSafetyAttendance({})}
             />
             <SafetyCostTable items={safetyItems} setItems={setSafetyItems} />
 
