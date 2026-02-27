@@ -8,7 +8,7 @@ import { DailyLogManager } from './components/DailyLogManager';
 import { GeminiAssistant } from './components/GeminiAssistant';
 import { UserGuide } from './components/UserGuide';
 import { ProjectInfo, Worker, PhotoEvidence, DailyAttendance, SafetyItem } from './types';
-import { Printer, Layout, FileText, ShieldCheck, CalendarCheck, HelpCircle, BarChart3, ChevronRight, Clock, Download, Upload, RotateCcw, ShoppingCart, Loader2, Save, FilePlus, ArrowLeftRight } from 'lucide-react';
+import { Printer, Layout, FileText, ShieldCheck, CalendarCheck, HelpCircle, BarChart3, ChevronRight, Clock, Download, Upload, RotateCcw, ShoppingCart, Loader2, Save, FilePlus, ArrowLeftRight, Trash2 } from 'lucide-react';
 import { 
   validatePhotoData, 
   createBlobUrlFromBase64, 
@@ -470,9 +470,17 @@ function App() {
               `• 공사명: ${backupSiteName}\n` +
               `• 근로자: ${backupWorkerCount}명\n` +
               `• 증빙 사진: ${backupLaborPhotoCount}장\n\n` +
-              `현장 기본 정보와 유도원/감시자 인건비(근로자·출역 기록·증빙 사진)를\n` +
+              `현장 기본 정보와 유도원/감시자 인건비(근로자·출역 기록)를\n` +
               `이 백업 파일로 복구하시겠습니까?\n\n` +
               `(취소: 현재 데이터 유지)`
+            );
+
+            // 유도원/감시자 증빙 사진 복구 여부 (투입인력 복구를 선택한 경우에만 질문)
+            const restoreLaborPhotos = restoreLabor && backupLaborPhotoCount > 0 && confirm(
+              `[1-b/2] 유도원 및 감시자 증빙 사진 복구\n\n` +
+              `• 증빙 사진: ${backupLaborPhotoCount}장\n\n` +
+              `증빙 사진도 함께 복구하시겠습니까?\n` +
+              `(취소: 투입인력 값만 복구, 증빙 사진 제외)`
             );
 
             // 안전시설 인건비 섹션 복구 여부
@@ -482,9 +490,17 @@ function App() {
               `• 안전시설 근로자: ${backupSafetyWorkerCount}명\n` +
               `• 안전시설 품목: ${backupSafetyCount}개\n` +
               `• 증빙 사진: ${backupSafetyPhotoCount}장\n\n` +
-              `안전시설 인건비 근로자·출역 기록·품목 내역과 증빙 사진을\n` +
+              `안전시설 인건비 근로자·출역 기록·품목 내역을\n` +
               `이 백업 파일로 복구하시겠습니까?\n\n` +
               `(취소: 현재 데이터 유지)`
+            );
+
+            // 안전시설 증빙 사진 복구 여부 (투입인력 복구를 선택한 경우에만 질문)
+            const restoreSafetyPhotos = restoreSafety && backupSafetyPhotoCount > 0 && confirm(
+              `[2-b/2] 안전시설 증빙 사진 복구\n\n` +
+              `• 증빙 사진: ${backupSafetyPhotoCount}장\n\n` +
+              `증빙 사진도 함께 복구하시겠습니까?\n` +
+              `(취소: 투입인력 값만 복구, 증빙 사진 제외)`
             );
 
             if (!restoreLabor && !restoreSafety) {
@@ -493,12 +509,12 @@ function App() {
             }
 
             // Clean up existing blob URLs for each section being restored
-            if (restoreLabor) {
+            if (restoreLabor && restoreLaborPhotos) {
               laborPhotos.forEach(p => {
                 if (p.fileUrl && p.fileUrl.startsWith('blob:')) URL.revokeObjectURL(p.fileUrl);
               });
             }
-            if (restoreSafety) {
+            if (restoreSafety && restoreSafetyPhotos) {
               safetyPhotos.forEach(p => {
                 if (p.fileUrl && p.fileUrl.startsWith('blob:')) URL.revokeObjectURL(p.fileUrl);
               });
@@ -513,11 +529,13 @@ function App() {
               setWorkers(Array.isArray(parsed.data.workers) ? parsed.data.workers : []);
               setAttendance(parsed.data.attendance && typeof parsed.data.attendance === 'object' ? parsed.data.attendance : {});
               // 이전 버전 호환: laborPhotos가 없으면 photos 사용
-              restorePhotosWithValidation(
-                Array.isArray(parsed.data.laborPhotos) ? parsed.data.laborPhotos :
-                (Array.isArray(parsed.data.photos) ? parsed.data.photos : []),
-                setLaborPhotos
-              );
+              if (restoreLaborPhotos) {
+                restorePhotosWithValidation(
+                  Array.isArray(parsed.data.laborPhotos) ? parsed.data.laborPhotos :
+                  (Array.isArray(parsed.data.photos) ? parsed.data.photos : []),
+                  setLaborPhotos
+                );
+              }
             }
 
             if (restoreSafety) {
@@ -525,15 +543,17 @@ function App() {
               setSafetyAttendance(parsed.data.safetyAttendance && typeof parsed.data.safetyAttendance === 'object' ? parsed.data.safetyAttendance : {});
               setSafetyItems(Array.isArray(parsed.data.safetyItems) ? parsed.data.safetyItems : []);
               // 안전시설 증빙 사진 복구
-              restorePhotosWithValidation(
-                Array.isArray(parsed.data.safetyPhotos) ? parsed.data.safetyPhotos : [],
-                setSafetyPhotos
-              );
+              if (restoreSafetyPhotos) {
+                restorePhotosWithValidation(
+                  Array.isArray(parsed.data.safetyPhotos) ? parsed.data.safetyPhotos : [],
+                  setSafetyPhotos
+                );
+              }
             }
 
             const restoredSections: string[] = [];
-            if (restoreLabor) restoredSections.push(`유도원/감시자 인건비 (근로자 ${backupWorkerCount}명, 사진 ${backupLaborPhotoCount}장)`);
-            if (restoreSafety) restoredSections.push(`안전시설 인건비 (근로자 ${backupSafetyWorkerCount}명, 품목 ${backupSafetyCount}개, 사진 ${backupSafetyPhotoCount}장)`);
+            if (restoreLabor) restoredSections.push(`유도원/감시자 인건비 (근로자 ${backupWorkerCount}명${restoreLaborPhotos ? `, 사진 ${backupLaborPhotoCount}장` : ', 사진 제외'})`);
+            if (restoreSafety) restoredSections.push(`안전시설 인건비 (근로자 ${backupSafetyWorkerCount}명, 품목 ${backupSafetyCount}개${restoreSafetyPhotos ? `, 사진 ${backupSafetyPhotoCount}장` : ', 사진 제외'})`);
             alert(`✅ 복구가 완료되었습니다.\n\n복구된 항목:\n${restoredSections.map(s => `• ${s}`).join('\n')}`);
           }
         } catch (error) {
@@ -1053,6 +1073,38 @@ function App() {
                     className="px-3 py-1.5 text-xs font-bold bg-amber-100 text-amber-700 hover:bg-amber-200 rounded-lg border border-amber-200 transition-colors"
                   >
                     ← 유도원으로 전체
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-500 bg-red-50 border border-red-200 px-4 py-2 rounded-full mt-1">
+                  <Trash2 className="w-4 h-4 text-red-500" />
+                  <span>증빙사진 전체삭제</span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      if (laborPhotos.length === 0) { alert('유도원/감시자 증빙 사진이 없습니다.'); return; }
+                      if (confirm(`유도원/감시자 증빙 사진 ${laborPhotos.length}장을 모두 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) {
+                        laborPhotos.forEach(p => { if (p.fileUrl && p.fileUrl.startsWith('blob:')) URL.revokeObjectURL(p.fileUrl); });
+                        setLaborPhotos([]);
+                      }
+                    }}
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-red-100 text-red-700 hover:bg-red-200 rounded-lg border border-red-200 transition-colors"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    유도원 사진 전체삭제
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (safetyPhotos.length === 0) { alert('안전시설 증빙 사진이 없습니다.'); return; }
+                      if (confirm(`안전시설 증빙 사진 ${safetyPhotos.length}장을 모두 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) {
+                        safetyPhotos.forEach(p => { if (p.fileUrl && p.fileUrl.startsWith('blob:')) URL.revokeObjectURL(p.fileUrl); });
+                        setSafetyPhotos([]);
+                      }
+                    }}
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-red-100 text-red-700 hover:bg-red-200 rounded-lg border border-red-200 transition-colors"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    안전시설 사진 전체삭제
                   </button>
                 </div>
               </div>
