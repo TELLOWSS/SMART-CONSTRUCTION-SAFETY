@@ -16,17 +16,39 @@ export const ProjectHeader: React.FC<Props> = ({ info, onChange, readOnly = fals
     onChange({ ...info, [field]: value });
   };
 
-  const generateRandomStyle = (): SignatureStyle => {
+  const generateDefaultStyle = (): SignatureStyle => {
     return {
-      rotation: Math.random() * 12 - 6, // -6 to 6 degrees
-      offsetX: Math.random() * 20 - 10, // -10 to 10 px
-      offsetY: Math.random() * 10 - 5,  // -5 to 5 px
-      scale: 0.9 + Math.random() * 0.2  // 0.9 to 1.1
+      rotation: 0,
+      offsetX: 0,
+      offsetY: 0,
+      scale: 1
     };
   };
 
+  const getSignatureStyle = (field: 'manager' | 'safety'): SignatureStyle => {
+    if (field === 'manager') {
+      return info.managerSignatureStyle || generateDefaultStyle();
+    }
+    return info.safetyManagerSignatureStyle || generateDefaultStyle();
+  };
+
+  const updateSignatureStyle = (field: 'manager' | 'safety', patch: Partial<SignatureStyle>) => {
+    if (field === 'manager') {
+      onChange({
+        ...info,
+        managerSignatureStyle: { ...getSignatureStyle('manager'), ...patch }
+      });
+      return;
+    }
+
+    onChange({
+      ...info,
+      safetyManagerSignatureStyle: { ...getSignatureStyle('safety'), ...patch }
+    });
+  };
+
   const handleSignatureSave = (dataUrl: string) => {
-    const style = generateRandomStyle();
+    const style = generateDefaultStyle();
     
     if (activeSignatureField === 'manager') {
       onChange({
@@ -189,6 +211,25 @@ export const ProjectHeader: React.FC<Props> = ({ info, onChange, readOnly = fals
                 </button>
               )}
             </div>
+            {info.managerSignature && (
+              <div className="mt-3 p-3 border border-indigo-100 rounded-xl bg-indigo-50/50 space-y-2">
+                <div className="text-[11px] font-bold text-indigo-700">서명 위치/크기 조정</div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <label className="text-slate-600">크기 ({getSignatureStyle('manager').scale.toFixed(2)}x)
+                    <input type="range" min="0.6" max="1.8" step="0.05" value={getSignatureStyle('manager').scale} onChange={(e) => updateSignatureStyle('manager', { scale: parseFloat(e.target.value) })} className="w-full accent-indigo-600" />
+                  </label>
+                  <label className="text-slate-600">회전 ({Math.round(getSignatureStyle('manager').rotation)}°)
+                    <input type="range" min="-20" max="20" step="1" value={getSignatureStyle('manager').rotation} onChange={(e) => updateSignatureStyle('manager', { rotation: parseFloat(e.target.value) })} className="w-full accent-indigo-600" />
+                  </label>
+                  <label className="text-slate-600">좌우 ({Math.round(getSignatureStyle('manager').offsetX)}px)
+                    <input type="range" min="-40" max="40" step="1" value={getSignatureStyle('manager').offsetX} onChange={(e) => updateSignatureStyle('manager', { offsetX: parseFloat(e.target.value) })} className="w-full accent-indigo-600" />
+                  </label>
+                  <label className="text-slate-600">상하 ({Math.round(getSignatureStyle('manager').offsetY)}px)
+                    <input type="range" min="-40" max="40" step="1" value={getSignatureStyle('manager').offsetY} onChange={(e) => updateSignatureStyle('manager', { offsetY: parseFloat(e.target.value) })} className="w-full accent-indigo-600" />
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Safety Manager Input with Signature */}
@@ -227,6 +268,25 @@ export const ProjectHeader: React.FC<Props> = ({ info, onChange, readOnly = fals
                 </button>
               )}
             </div>
+            {info.safetyManagerSignature && (
+              <div className="mt-3 p-3 border border-indigo-100 rounded-xl bg-indigo-50/50 space-y-2">
+                <div className="text-[11px] font-bold text-indigo-700">서명 위치/크기 조정</div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <label className="text-slate-600">크기 ({getSignatureStyle('safety').scale.toFixed(2)}x)
+                    <input type="range" min="0.6" max="1.8" step="0.05" value={getSignatureStyle('safety').scale} onChange={(e) => updateSignatureStyle('safety', { scale: parseFloat(e.target.value) })} className="w-full accent-indigo-600" />
+                  </label>
+                  <label className="text-slate-600">회전 ({Math.round(getSignatureStyle('safety').rotation)}°)
+                    <input type="range" min="-20" max="20" step="1" value={getSignatureStyle('safety').rotation} onChange={(e) => updateSignatureStyle('safety', { rotation: parseFloat(e.target.value) })} className="w-full accent-indigo-600" />
+                  </label>
+                  <label className="text-slate-600">좌우 ({Math.round(getSignatureStyle('safety').offsetX)}px)
+                    <input type="range" min="-40" max="40" step="1" value={getSignatureStyle('safety').offsetX} onChange={(e) => updateSignatureStyle('safety', { offsetX: parseFloat(e.target.value) })} className="w-full accent-indigo-600" />
+                  </label>
+                  <label className="text-slate-600">상하 ({Math.round(getSignatureStyle('safety').offsetY)}px)
+                    <input type="range" min="-40" max="40" step="1" value={getSignatureStyle('safety').offsetY} onChange={(e) => updateSignatureStyle('safety', { offsetY: parseFloat(e.target.value) })} className="w-full accent-indigo-600" />
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

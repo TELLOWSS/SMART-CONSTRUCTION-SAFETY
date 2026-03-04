@@ -115,7 +115,7 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
                 category: (categoryOptions && categoryOptions.length > 0) ? categoryOptions[0] : PHOTO_CATEGORIES[0],
                 description: '',
                 location: '',
-                date: new Date().toISOString().split('T')[0],
+                date: new Date(Date.now() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0],
               });
           }
         }

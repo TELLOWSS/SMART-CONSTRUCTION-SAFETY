@@ -3,7 +3,7 @@ export interface SignatureStyle {
   rotation: number; // degrees
   offsetX: number; // px
   offsetY: number; // px
-  scale: number; // scale factor (0.9 - 1.1)
+  scale: number; // scale factor (0.6 - 1.8)
 }
 
 export interface ProjectInfo {

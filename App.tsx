@@ -1,12 +1,10 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { ProjectHeader } from './components/ProjectHeader';
 import { LaborCostTable } from './components/LaborCostTable';
 import { SafetyCostTable } from './components/SafetyCostTable';
 import { PhotoLedger } from './components/PhotoLedger';
 import { DailyLogManager } from './components/DailyLogManager';
-import { GeminiAssistant } from './components/GeminiAssistant';
-import { UserGuide } from './components/UserGuide';
 import { ProjectInfo, Worker, PhotoEvidence, DailyAttendance, SafetyItem } from './types';
 import { Printer, Layout, FileText, ShieldCheck, CalendarCheck, HelpCircle, BarChart3, ChevronRight, Clock, Download, Upload, RotateCcw, ShoppingCart, Loader2, Save, FilePlus, ArrowLeftRight, Trash2 } from 'lucide-react';
 import { 
@@ -16,6 +14,9 @@ import {
   getPhotoStats,
   base64ToBlob
 } from './utils/photoOptimization';
+
+const GeminiAssistant = lazy(() => import('./components/GeminiAssistant').then(module => ({ default: module.GeminiAssistant })));
+const UserGuide = lazy(() => import('./components/UserGuide').then(module => ({ default: module.UserGuide })));
 
 // Helper to get local date string (YYYY-MM-DD) correctly considering timezone offset
 const getLocalDateString = () => {
@@ -51,6 +52,7 @@ function App() {
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [backupProgress, setBackupProgress] = useState(0);
   const [isPrinting, setIsPrinting] = useState(false); // New state for print loading
+  const [showLaborCost, setShowLaborCost] = useState(true); // Toggle for 유도원/감시자 인건비 section in Report
   const [showSafetyCost, setShowSafetyCost] = useState(true); // Toggle for 안전시설 인건비 section in Report
   const [showSafetyItems, setShowSafetyItems] = useState(true); // Toggle for 안전시설 재료비 내역(품목) in Report
   
@@ -220,6 +222,12 @@ function App() {
   };
 
   const handlePrint = () => {
+    if (!showLaborCost && !showSafetyCost) {
+      alert('출력할 보고서 항목이 없습니다.\n\n최소 1개 이상(유도원/감시자 또는 안전시설) 항목을 포함으로 설정해주세요.');
+      setActiveTab('preview');
+      return;
+    }
+
     const validation = validateBeforePrint();
     
     if (!validation.isValid) {
@@ -909,7 +917,9 @@ function App() {
 
            {/* Right: Actions (Order 2 on mobile to be right, Order 3 on desktop) */}
            <div className="order-2 md:order-3 flex items-center gap-2 shrink-0">
-              <GeminiAssistant projectInfo={projectInfo} workers={workers} safetyItems={safetyItems} photos={[...laborPhotos, ...safetyPhotos]} />
+              <Suspense fallback={null}>
+                <GeminiAssistant projectInfo={projectInfo} workers={workers} safetyItems={safetyItems} photos={[...laborPhotos, ...safetyPhotos]} />
+              </Suspense>
               
               {/* Data Management Buttons */}
               <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
@@ -1183,6 +1193,8 @@ function App() {
             setAttendance={setAttendance}
             photos={laborPhotos}
             setPhotos={setLaborPhotos}
+            safetyPhotos={safetyPhotos}
+            setSafetyPhotos={setSafetyPhotos}
             year={projectInfo.year}
             month={projectInfo.month}
             safetyWorkers={safetyWorkers}
@@ -1193,7 +1205,9 @@ function App() {
 
         {/* Guide Tab */}
         {activeTab === 'guide' && (
-          <UserGuide />
+          <Suspense fallback={null}>
+            <UserGuide />
+          </Suspense>
         )}
 
         {/* Report Preview Tab */}
@@ -1201,6 +1215,15 @@ function App() {
           <div className="flex flex-col items-center w-full">
             {/* Print Options Toolbar */}
             <div className="w-full max-w-[21cm] mb-4 flex justify-end gap-3 no-print animate-in fade-in slide-in-from-top-2">
+                 <label className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200 cursor-pointer hover:bg-slate-50 transition-all select-none text-slate-700 font-bold text-sm">
+                    <input 
+                      type="checkbox" 
+                      checked={showLaborCost} 
+                      onChange={(e) => setShowLaborCost(e.target.checked)}
+                      className="accent-indigo-600 w-4 h-4"
+                    />
+                    <span>유도원/감시자 인건비 내역 포함</span>
+                 </label>
                  <label className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200 cursor-pointer hover:bg-slate-50 transition-all select-none text-slate-700 font-bold text-sm">
                     <input 
                       type="checkbox" 
@@ -1223,6 +1246,7 @@ function App() {
             </div>
 
             {/* ===== 갑지 1: 유도원 및 감시자 인건비 (Front Sheet – Page 1) ===== */}
+            {showLaborCost && (
             <div className="bg-white shadow-2xl min-h-[29.7cm] max-w-[21cm] w-full mx-auto print:shadow-none print:max-w-none animate-in zoom-in-95 duration-300 origin-top rounded-sm print:break-after-page">
              <div className="p-[10mm] md:p-[15mm] h-full flex flex-col">
                 <div className="border-2 border-slate-900 p-1 flex-1">
@@ -1313,8 +1337,10 @@ function App() {
                 </div>
              </div>
             </div>
+            )}
 
             {/* ===== 첨부 1: 유도원 및 감시자 인건비 제출 증빙 양식 (Attachment 1) ===== */}
+            {showLaborCost && (
             <div className="bg-white shadow-2xl max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm print:break-after-page">
               <div className="p-[10mm] md:p-[15mm]">
                 <div className="border-2 border-slate-900 p-1">
@@ -1335,6 +1361,7 @@ function App() {
                 </div>
               </div>
             </div>
+            )}
 
             {/* ===== 갑지 2: 안전시설 인건비 (Front Sheet – Page 2) ===== */}
             {showSafetyCost && (
@@ -1473,6 +1500,7 @@ function App() {
             )}
 
             {/* ===== 첨부 2: 유도원 및 감시자 인건비 증빙 사진대지 (Attachment 2 – Labor) ===== */}
+            {showLaborCost && (
             <div className="bg-white shadow-2xl max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm print:break-after-page">
               <div className="p-[10mm] md:p-[15mm]">
                 <div className="border-2 border-slate-900 p-1">
@@ -1486,6 +1514,7 @@ function App() {
                 </div>
               </div>
             </div>
+            )}
 
             {/* ===== 첨부 2 (갑지 2 소속): 안전시설 인건비 증빙 사진대지 (Attachment 2 – Safety) ===== */}
             {showSafetyCost && (

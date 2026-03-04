@@ -9,6 +9,8 @@ interface Props {
   setAttendance: React.Dispatch<React.SetStateAction<DailyAttendance>>;
   photos: PhotoEvidence[];
   setPhotos: React.Dispatch<React.SetStateAction<PhotoEvidence[]>>;
+  safetyPhotos?: PhotoEvidence[];
+  setSafetyPhotos?: React.Dispatch<React.SetStateAction<PhotoEvidence[]>>;
   year: number;
   month: number;
   safetyWorkers?: Worker[];
@@ -16,7 +18,7 @@ interface Props {
   setSafetyAttendance?: React.Dispatch<React.SetStateAction<DailyAttendance>>;
 }
 
-export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAttendance, photos, setPhotos, year, month, safetyWorkers = [], safetyAttendance = {}, setSafetyAttendance }) => {
+export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAttendance, photos, setPhotos, safetyPhotos = [], setSafetyPhotos, year, month, safetyWorkers = [], safetyAttendance = {}, setSafetyAttendance }) => {
   // Use local date string instead of UTC to fix timezone issues
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const now = new Date();
@@ -148,6 +150,7 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
     : safetyWorkers;
 
   const todaysPhotos = photos.filter(p => p.date === selectedDate);
+  const todaysSafetyPhotos = safetyPhotos.filter(p => p.date === selectedDate);
   
   // Image Compression Utility
   const compressImage = (file: File): Promise<Blob> => {
@@ -198,7 +201,7 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
     });
   };
 
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'labor' | 'safety' = 'labor') => {
     if (e.target.files && e.target.files.length > 0) {
       setIsProcessing(true);
       try {
@@ -261,7 +264,11 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
         }
         
         if (newPhotos.length > 0) {
-          setPhotos([...photos, ...newPhotos]);
+          if (target === 'safety' && setSafetyPhotos) {
+            setSafetyPhotos(prev => [...prev, ...newPhotos]);
+          } else {
+            setPhotos(prev => [...prev, ...newPhotos]);
+          }
         }
       } catch (error) {
         console.error("Photo upload failed:", error);
@@ -275,18 +282,30 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
     }
   };
 
-  const updatePhotoDescription = (id: string, description: string) => {
-    setPhotos(prevPhotos => 
-      prevPhotos.map(p => p.id === id ? { ...p, description } : p)
-    );
+  const updatePhotoDescription = (id: string, description: string, target: 'labor' | 'safety' = 'labor') => {
+    if (target === 'safety' && setSafetyPhotos) {
+      setSafetyPhotos(prevPhotos => 
+        prevPhotos.map(p => p.id === id ? { ...p, description } : p)
+      );
+      return;
+    }
+
+    setPhotos(prevPhotos => prevPhotos.map(p => p.id === id ? { ...p, description } : p));
   };
 
-  const removePhoto = (id: string) => {
-    const photoToRemove = photos.find(p => p.id === id);
+  const removePhoto = (id: string, target: 'labor' | 'safety' = 'labor') => {
+    const sourcePhotos = target === 'safety' ? safetyPhotos : photos;
+    const photoToRemove = sourcePhotos.find(p => p.id === id);
     if (photoToRemove?.fileUrl.startsWith('blob:')) {
       URL.revokeObjectURL(photoToRemove.fileUrl);
     }
-    setPhotos(photos.filter(p => p.id !== id));
+
+    if (target === 'safety' && setSafetyPhotos) {
+      setSafetyPhotos(prev => prev.filter(p => p.id !== id));
+      return;
+    }
+
+    setPhotos(prev => prev.filter(p => p.id !== id));
   };
 
   return (
@@ -534,6 +553,7 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
         </div>
 
         {/* Right: Photo Input */}
+        <div className="space-y-6">
         <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 h-fit">
            <div className="flex justify-between items-center mb-6">
             <h3 className="text-xl font-bold flex items-center gap-3 text-slate-800">
@@ -545,7 +565,7 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
             <label className={`cursor-pointer flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 ${isProcessing ? 'opacity-70 cursor-wait' : ''}`}>
               {isProcessing ? <Loader2 className="w-3 h-3 animate-spin"/> : <Plus className="w-3 h-3" />}
               {isProcessing ? '처리중...' : '사진 추가'}
-              <input type="file" className="hidden" accept="image/*" onChange={handlePhotoUpload} disabled={isProcessing} multiple />
+              <input type="file" className="hidden" accept="image/*" onChange={(e) => handlePhotoUpload(e, 'labor')} disabled={isProcessing} multiple />
             </label>
            </div>
 
@@ -555,7 +575,7 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
                  <div className="relative w-full sm:w-48 h-40 sm:h-auto shrink-0 bg-slate-100">
                    <img src={photo.fileUrl} alt="daily" className="w-full h-full object-cover" />
                    <button 
-                      onClick={() => removePhoto(photo.id)}
+                      onClick={() => removePhoto(photo.id, 'labor')}
                       className="absolute top-2 right-2 bg-black/40 hover:bg-red-500 text-white p-1.5 rounded-full transition-all backdrop-blur-sm opacity-0 group-hover:opacity-100"
                    >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -572,7 +592,7 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
                         <input 
                           type="text" 
                           value={photo.description}
-                          onChange={(e) => updatePhotoDescription(photo.id, e.target.value)}
+                          onChange={(e) => updatePhotoDescription(photo.id, e.target.value, 'labor')}
                           placeholder="작업 내용을 입력하세요 (예: 101동 안전난간 보수)"
                           className="w-full text-sm border-b-2 border-slate-200 focus:border-indigo-500 outline-none py-2 transition-colors bg-transparent placeholder-slate-400 font-medium text-slate-700"
                         />
@@ -590,6 +610,67 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
                </div>
              )}
            </div>
+        </div>
+
+        {setSafetyPhotos && (
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 h-fit">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold flex items-center gap-3 text-slate-800">
+                <div className="bg-orange-100 p-2 rounded-xl text-orange-600">
+                  <Camera className="w-5 h-5" />
+                </div>
+                금일 안전시설 사진
+              </h3>
+              <label className={`cursor-pointer flex items-center gap-2 bg-orange-600 hover:bg-orange-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 ${isProcessing ? 'opacity-70 cursor-wait' : ''}`}>
+                {isProcessing ? <Loader2 className="w-3 h-3 animate-spin"/> : <Plus className="w-3 h-3" />}
+                {isProcessing ? '처리중...' : '사진 추가'}
+                <input type="file" className="hidden" accept="image/*" onChange={(e) => handlePhotoUpload(e, 'safety')} disabled={isProcessing} multiple />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 gap-5">
+              {todaysSafetyPhotos.map(photo => (
+                <div key={photo.id} className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-all duration-200 flex flex-col sm:flex-row group">
+                  <div className="relative w-full sm:w-48 h-40 sm:h-auto shrink-0 bg-slate-100">
+                    <img src={photo.fileUrl} alt="daily-safety" className="w-full h-full object-cover" />
+                    <button 
+                        onClick={() => removePhoto(photo.id, 'safety')}
+                        className="absolute top-2 right-2 bg-black/40 hover:bg-red-500 text-white p-1.5 rounded-full transition-all backdrop-blur-sm opacity-0 group-hover:opacity-100"
+                    >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                    <div className="absolute bottom-2 left-2 right-2 bg-black/60 backdrop-blur-md text-white text-[10px] px-2 py-1 rounded-lg text-center font-medium truncate">
+                      {photo.category}
+                    </div>
+                  </div>
+                  <div className="p-4 flex-1 flex flex-col justify-center bg-slate-50/30">
+                      <label className="text-xs font-bold text-orange-600 mb-2 flex items-center gap-1.5 uppercase tracking-wide">
+                        <Edit3 className="w-3 h-3" /> 작업 내용 설명
+                      </label>
+                      <div className="relative">
+                          <input 
+                            type="text" 
+                            value={photo.description}
+                            onChange={(e) => updatePhotoDescription(photo.id, e.target.value, 'safety')}
+                            placeholder="작업 내용을 입력하세요"
+                            className="w-full text-sm border-b-2 border-slate-200 focus:border-orange-500 outline-none py-2 transition-colors bg-transparent placeholder-slate-400 font-medium text-slate-700"
+                          />
+                      </div>
+                  </div>
+                </div>
+              ))}
+              {todaysSafetyPhotos.length === 0 && (
+                <div className="py-16 text-center text-slate-400 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center">
+                  <div className="bg-white p-3 rounded-full shadow-sm mb-3">
+                      <ImagePlus className="w-6 h-6 text-slate-300" />
+                  </div>
+                  <p className="text-sm font-medium text-slate-500">오늘 촬영한 안전시설 사진이 없습니다.</p>
+                  <p className="text-xs mt-1 text-slate-400">우측 상단 버튼을 눌러 추가하세요.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         </div>
       </div>
     </div>
