@@ -185,7 +185,11 @@ function App() {
   }, [safetyAttendance]);
 
   // Validation function for required fields before report generation
-  const validateBeforePrint = (): { isValid: boolean; errors: string[] } => {
+  const validateBeforePrint = (options: {
+    includeLaborCost: boolean;
+    includeSafetyCost: boolean;
+    includeSafetyItems: boolean;
+  }): { isValid: boolean; errors: string[] } => {
     const errors: string[] = [];
     
     // Required fields validation
@@ -202,9 +206,15 @@ function App() {
       errors.push("업체명(수급인)을 입력하세요.");
     }
     
-    // Business logic validation
-    if (workers.length === 0) {
-      errors.push("최소 1명 이상의 근로자를 등록하세요.");
+    // Business logic validation (선택한 출력 항목 기준)
+    if (options.includeLaborCost && workers.length === 0) {
+      errors.push("유도원/감시자 인건비 출력을 위해 최소 1명 이상의 근로자를 등록하세요.");
+    }
+
+    const hasSafetyWorkers = safetyWorkers.length > 0;
+    const hasSafetyItems = options.includeSafetyItems && safetyItems.length > 0;
+    if (options.includeSafetyCost && !hasSafetyWorkers && !hasSafetyItems) {
+      errors.push("안전시설 인건비 출력을 위해 안전시설 근로자 또는 재료비 내역을 등록하세요.");
     }
     
     // Year month validation
@@ -221,20 +231,28 @@ function App() {
     };
   };
 
-  const handlePrint = () => {
-    if (!showLaborCost && !showSafetyCost) {
+  const handlePrintWithOptions = (options: {
+    includeLaborCost: boolean;
+    includeSafetyCost: boolean;
+    includeSafetyItems: boolean;
+  }) => {
+    if (!options.includeLaborCost && !options.includeSafetyCost) {
       alert('출력할 보고서 항목이 없습니다.\n\n최소 1개 이상(유도원/감시자 또는 안전시설) 항목을 포함으로 설정해주세요.');
       setActiveTab('preview');
       return;
     }
 
-    const validation = validateBeforePrint();
+    const validation = validateBeforePrint(options);
     
     if (!validation.isValid) {
       alert(`❌ 보고서를 생성할 수 없습니다.\n다음 항목들을 확인하세요:\n\n${validation.errors.map(e => `• ${e}`).join('\n')}`);
       setActiveTab('setup');
       return;
     }
+
+    setShowLaborCost(options.includeLaborCost);
+    setShowSafetyCost(options.includeSafetyCost);
+    setShowSafetyItems(options.includeSafetyItems);
 
     setIsPrinting(true);
     setActiveTab('preview');
@@ -244,6 +262,30 @@ function App() {
       window.print();
       setIsPrinting(false);
     }, 800);
+  };
+
+  const handlePrint = () => {
+    handlePrintWithOptions({
+      includeLaborCost: showLaborCost,
+      includeSafetyCost: showSafetyCost,
+      includeSafetyItems: showSafetyItems,
+    });
+  };
+
+  const handlePrintLaborOnly = () => {
+    handlePrintWithOptions({
+      includeLaborCost: true,
+      includeSafetyCost: false,
+      includeSafetyItems: false,
+    });
+  };
+
+  const handlePrintSafetyOnly = () => {
+    handlePrintWithOptions({
+      includeLaborCost: false,
+      includeSafetyCost: true,
+      includeSafetyItems: showSafetyItems,
+    });
   };
 
   // --- Backup & Restore Logic ---
@@ -970,15 +1012,36 @@ function App() {
                 </button>
               </div>
 
-              <button 
-                type="button"
-                onClick={handlePrint}
-                disabled={isPrinting}
-                className={`flex items-center gap-2 bg-slate-900 hover:bg-black text-white px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-md hover:shadow-lg active:scale-95 whitespace-nowrap ${isPrinting ? 'opacity-70 cursor-wait' : ''}`}
-              >
-                {isPrinting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
-                <span className="hidden sm:inline">{isPrinting ? '준비 중...' : 'PDF 저장'}</span>
-              </button>
+              <div className="flex items-center gap-1">
+                <button 
+                  type="button"
+                  onClick={handlePrint}
+                  disabled={isPrinting}
+                  className={`flex items-center gap-2 bg-slate-900 hover:bg-black text-white px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-md hover:shadow-lg active:scale-95 whitespace-nowrap ${isPrinting ? 'opacity-70 cursor-wait' : ''}`}
+                  title="현재 선택 기준으로 PDF 저장"
+                >
+                  {isPrinting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+                  <span className="hidden sm:inline">{isPrinting ? '준비 중...' : '전체 PDF'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintLaborOnly}
+                  disabled={isPrinting}
+                  className={`inline-flex items-center px-2.5 py-2 rounded-lg text-xs font-bold border transition-all whitespace-nowrap ${isPrinting ? 'opacity-60 cursor-wait border-slate-200 text-slate-400 bg-slate-100' : 'border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100'}`}
+                  title="유도원/감시자만 PDF 저장"
+                >
+                  유도원
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintSafetyOnly}
+                  disabled={isPrinting}
+                  className={`inline-flex items-center px-2.5 py-2 rounded-lg text-xs font-bold border transition-all whitespace-nowrap ${isPrinting ? 'opacity-60 cursor-wait border-slate-200 text-slate-400 bg-slate-100' : 'border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100'}`}
+                  title="안전시설만 PDF 저장"
+                >
+                  안전시설
+                </button>
+              </div>
            </div>
         </div>
       </header>
@@ -1214,8 +1277,35 @@ function App() {
         {activeTab === 'preview' && (
           <div className="flex flex-col items-center w-full">
             {/* Print Options Toolbar */}
-            <div className="w-full max-w-[21cm] mb-4 flex justify-end gap-3 no-print animate-in fade-in slide-in-from-top-2">
-                 <label className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200 cursor-pointer hover:bg-slate-50 transition-all select-none text-slate-700 font-bold text-sm">
+            <div className="w-full max-w-[21cm] mb-3 sm:mb-4 flex flex-col items-end gap-1.5 sm:gap-2 no-print animate-in fade-in slide-in-from-top-2 sticky top-[5.25rem] sm:top-[6rem] z-30 bg-slate-50/90 backdrop-blur-sm p-2 rounded-xl border border-slate-200/70">
+              <div className="w-full flex flex-wrap justify-end gap-1.5 sm:gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  disabled={isPrinting}
+                  className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs font-bold border transition-all ${isPrinting ? 'opacity-60 cursor-wait border-slate-200 text-slate-400 bg-slate-100' : 'border-slate-300 text-slate-700 bg-white hover:bg-slate-50'}`}
+                >
+                  전체 PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintLaborOnly}
+                  disabled={isPrinting}
+                  className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs font-bold border transition-all ${isPrinting ? 'opacity-60 cursor-wait border-slate-200 text-slate-400 bg-slate-100' : 'border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100'}`}
+                >
+                  유도원 PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintSafetyOnly}
+                  disabled={isPrinting}
+                  className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs font-bold border transition-all ${isPrinting ? 'opacity-60 cursor-wait border-slate-200 text-slate-400 bg-slate-100' : 'border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100'}`}
+                >
+                  안전시설 PDF
+                </button>
+              </div>
+              <div className="w-full flex flex-wrap justify-end gap-1.5 sm:gap-2">
+                <label className="flex items-center gap-2 bg-indigo-50 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg shadow-sm border border-indigo-200 cursor-pointer hover:bg-indigo-100 transition-all select-none text-indigo-700 font-bold text-xs sm:text-sm">
                     <input 
                       type="checkbox" 
                       checked={showLaborCost} 
@@ -1223,26 +1313,27 @@ function App() {
                       className="accent-indigo-600 w-4 h-4"
                     />
                     <span>유도원/감시자 인건비 내역 포함</span>
-                 </label>
-                 <label className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200 cursor-pointer hover:bg-slate-50 transition-all select-none text-slate-700 font-bold text-sm">
+                </label>
+                <label className="flex items-center gap-2 bg-emerald-50 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg shadow-sm border border-emerald-200 cursor-pointer hover:bg-emerald-100 transition-all select-none text-emerald-700 font-bold text-xs sm:text-sm">
                     <input 
                       type="checkbox" 
                       checked={showSafetyCost} 
                       onChange={(e) => setShowSafetyCost(e.target.checked)}
-                      className="accent-indigo-600 w-4 h-4"
+                      className="accent-emerald-600 w-4 h-4"
                     />
                     <span>안전시설 인건비 내역 포함</span>
-                 </label>
-                 <label className={`flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow-sm border cursor-pointer hover:bg-slate-50 transition-all select-none text-sm font-bold ${showSafetyCost ? 'border-slate-200 text-slate-700' : 'border-slate-100 text-slate-400 cursor-not-allowed'}`}>
+                </label>
+                <label className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg shadow-sm border cursor-pointer transition-all select-none text-xs sm:text-sm font-bold ${showSafetyCost ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100' : 'bg-slate-100 border-slate-100 text-slate-400 cursor-not-allowed'}`}>
                     <input 
                       type="checkbox" 
                       checked={showSafetyItems} 
                       onChange={(e) => setShowSafetyItems(e.target.checked)}
                       disabled={!showSafetyCost}
-                      className="accent-indigo-600 w-4 h-4"
+                      className="accent-emerald-600 w-4 h-4"
                     />
                     <span>안전시설 재료비 내역(품목) 포함</span>
-                 </label>
+                </label>
+              </div>
             </div>
 
             {/* ===== 갑지 1: 유도원 및 감시자 인건비 (Front Sheet – Page 1) ===== */}
