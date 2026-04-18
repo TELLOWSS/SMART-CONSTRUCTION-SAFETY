@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { PhotoEvidence, PHOTO_CATEGORIES, CompressionResult } from '../types';
 import { ImagePlus, MapPin, Calendar, X, Camera, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -14,6 +14,29 @@ interface Props {
 export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = false, title, categoryOptions }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [sectionCollapsed, setSectionCollapsed] = useState(false);
+  const [inferredOrientations, setInferredOrientations] = useState<Record<string, 'portrait' | 'landscape' | 'square'>>({});
+
+  const getImageOrientation = (blob: Blob): Promise<'portrait' | 'landscape' | 'square'> => {
+    return new Promise((resolve, reject) => {
+      const imageUrl = URL.createObjectURL(blob);
+      const img = new Image();
+
+      img.onload = () => {
+        const { width, height } = img;
+        URL.revokeObjectURL(imageUrl);
+        if (height > width) resolve('portrait');
+        else if (width > height) resolve('landscape');
+        else resolve('square');
+      };
+
+      img.onerror = (error) => {
+        URL.revokeObjectURL(imageUrl);
+        reject(error);
+      };
+
+      img.src = imageUrl;
+    });
+  };
 
   // Image Compression Utility (Duplicated for component isolation, in a real app would be a shared util)
   const compressImage = (file: File): Promise<Blob> => {
@@ -109,6 +132,14 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
               compressionErrors.push(`"${result.file.name}" 압축 실패: ${result.error instanceof Error ? result.error.message : '알 수 없는 오류'}`);
               continue;
             }
+
+            let orientation: 'portrait' | 'landscape' | 'square' = 'landscape';
+            try {
+              orientation = await getImageOrientation(result.blob);
+            } catch (orientationError) {
+              console.warn(`사진 방향 감지 실패 (${result.file.name})`, orientationError);
+            }
+
             newPhotos.push({
                 id: crypto.randomUUID(),
                 fileUrl: URL.createObjectURL(result.blob),
@@ -116,6 +147,7 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
                 description: '',
                 location: '',
                 date: new Date(Date.now() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0],
+                orientation,
               });
           }
         }
@@ -152,6 +184,55 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
     setPhotos(photos.filter(p => p.id !== id));
   };
 
+  useEffect(() => {
+    if (!readOnly) return;
+
+    const targets = photos.filter(photo => !photo.orientation && !inferredOrientations[photo.id]);
+    if (targets.length === 0) return;
+
+    let isCancelled = false;
+
+    const inferLegacyOrientations = async () => {
+      const updates: Record<string, 'portrait' | 'landscape' | 'square'> = {};
+
+      await Promise.all(
+        targets.map(async (photo) => {
+          try {
+            const response = await fetch(photo.fileUrl);
+            if (!response.ok) return;
+            const blob = await response.blob();
+            updates[photo.id] = await getImageOrientation(blob);
+          } catch {
+            return;
+          }
+        })
+      );
+
+      if (!isCancelled && Object.keys(updates).length > 0) {
+        setInferredOrientations(prev => ({ ...prev, ...updates }));
+      }
+    };
+
+    inferLegacyOrientations();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [photos, readOnly, inferredOrientations]);
+
+  const getFrameAspectClass = (photo: PhotoEvidence) => {
+    const orientation = photo.orientation || inferredOrientations[photo.id] || 'landscape';
+    if (orientation === 'portrait') return 'aspect-[3/4]';
+    if (orientation === 'square') return 'aspect-square';
+    return 'aspect-[4/3]';
+  };
+
+  const getObjectPositionClass = (photo: PhotoEvidence) => {
+    if (photo.cropPosition === 'top') return 'object-top';
+    if (photo.cropPosition === 'bottom') return 'object-bottom';
+    return 'object-center';
+  };
+
   if (readOnly) {
     // Sort photos by date for the report
     const sortedPhotos = [...photos].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -166,8 +247,8 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
         <div className="grid grid-cols-2 gap-0 border-t border-l border-slate-400">
           {sortedPhotos.map((photo, index) => (
             <div key={photo.id} className="print-break-inside-avoid border-r border-b border-slate-400 p-2">
-              <div className="aspect-[4/3] w-full overflow-hidden border border-slate-200 mb-2 relative bg-gray-100 flex items-center justify-center">
-                 <img src={photo.fileUrl} alt={photo.category} className="object-contain w-full h-full" />
+                <div className={`${getFrameAspectClass(photo)} w-full overflow-hidden border border-slate-200 mb-2 relative bg-gray-100`}>
+                  <img src={photo.fileUrl} alt={photo.category} className={`object-cover ${getObjectPositionClass(photo)} w-full h-full`} />
               </div>
               <div className="text-sm">
                 <table className="w-full border-collapse border border-slate-300 text-xs">
@@ -294,6 +375,24 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
                     onChange={(e) => updatePhoto(photo.id, 'date', e.target.value)}
                     className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs focus:border-indigo-500 outline-none bg-slate-50 focus:bg-white text-slate-600"
                   />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 mb-1.5 uppercase tracking-wide">출력 크롭 위치</label>
+                <div className="relative">
+                  <select
+                    value={photo.cropPosition || 'center'}
+                    onChange={(e) => updatePhoto(photo.id, 'cropPosition', e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all cursor-pointer font-medium text-slate-700 appearance-none"
+                  >
+                    <option value="top">상단 우선</option>
+                    <option value="center">중앙 기준</option>
+                    <option value="bottom">하단 우선</option>
+                  </select>
+                  <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                  </div>
                 </div>
               </div>
             </div>
