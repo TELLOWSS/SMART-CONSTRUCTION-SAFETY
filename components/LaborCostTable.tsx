@@ -25,9 +25,10 @@ interface Props {
   moveLabel?: string; // Label for move button e.g. "→ 안전시설로" or "← 유도원으로"
   onDeleteWorker?: (workerId: string) => void; // Override delete to allow attendance cleanup
   onResetAttendance?: () => void; // Reset output work hours (출력공수) to zero
+  includeAllWorkersInReport?: boolean; // Print all registered workers regardless of attendance
 }
 
-export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendance = {}, year = new Date().getFullYear(), month = new Date().getMonth() + 1, readOnly = false, sectionTitle = '유도원 및 감시자 인건비 산출 정보', reportTitle = '1. 유도원 및 감시자 인건비 제출 증빙 양식', onMoveWorker, moveLabel = '→ 이동', onDeleteWorker, onResetAttendance }) => {
+export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendance = {}, year = new Date().getFullYear(), month = new Date().getMonth() + 1, readOnly = false, sectionTitle = '유도원 및 감시자 인건비 산출 정보', reportTitle = '1. 유도원 및 감시자 인건비 제출 증빙 양식', onMoveWorker, moveLabel = '→ 이동', onDeleteWorker, onResetAttendance, includeAllWorkersInReport = false }) => {
   // For expanding detailed input in edit mode
   const [expandedWorkerId, setExpandedWorkerId] = useState<string | null>(null);
   const [sectionCollapsed, setSectionCollapsed] = useState(false);
@@ -128,7 +129,8 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
       });
     });
 
-    const hiddenWorkersCount = workers.length - workersWithAttendance.length;
+    const reportWorkers = includeAllWorkersInReport ? workers : workersWithAttendance;
+    const hiddenWorkersCount = includeAllWorkersInReport ? 0 : (workers.length - workersWithAttendance.length);
 
     return (
       <div className="mb-8 break-inside-avoid">
@@ -145,7 +147,7 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
         )}
         
         <div className="space-y-4">
-          {workersWithAttendance.map((worker, index) => {
+          {reportWorkers.map((worker, index) => {
              const totalPay = worker.daysWorked * worker.dailyRate;
              const netPay = totalPay; 
 
@@ -203,7 +205,7 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
             );
           })}
           
-          {workersWithAttendance.length === 0 && (
+          {reportWorkers.length === 0 && (
              <div className="border border-slate-400 p-8 text-center text-slate-400 italic bg-slate-50">
                등록된 근로자 내역이 없습니다.
              </div>

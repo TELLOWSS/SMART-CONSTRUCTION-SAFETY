@@ -1574,6 +1574,7 @@ function App() {
                           year={projectInfo.year}
                           month={projectInfo.month}
                           reportTitle="안전시설 인건비 근로자 증빙 양식"
+                          includeAllWorkersInReport
                           readOnly
                         />
                       )}
