@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Worker, PhotoEvidence, DailyAttendance, PHOTO_CATEGORIES, CompressionResult } from '../types';
 import { Calendar, ChevronLeft, ChevronRight, CheckCircle2, Circle, Camera, Plus, MapPin, ImagePlus, Edit3, User, Clock, Loader2, EyeOff, Eye } from 'lucide-react';
+import { estimateMemoryUsage, optimizeImage, processInChunks } from '../utils/photoOptimization';
 
 interface Props {
   workers: Worker[];
@@ -16,9 +17,10 @@ interface Props {
   safetyWorkers?: Worker[];
   safetyAttendance?: DailyAttendance;
   setSafetyAttendance?: React.Dispatch<React.SetStateAction<DailyAttendance>>;
+  uploadQualityPreset?: 'low' | 'balanced' | 'high';
 }
 
-export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAttendance, photos, setPhotos, safetyPhotos = [], setSafetyPhotos, year, month, safetyWorkers = [], safetyAttendance = {}, setSafetyAttendance }) => {
+export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAttendance, photos, setPhotos, safetyPhotos = [], setSafetyPhotos, year, month, safetyWorkers = [], safetyAttendance = {}, setSafetyAttendance, uploadQualityPreset = 'balanced' }) => {
   // Use local date string instead of UTC to fix timezone issues
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const now = new Date();
@@ -152,55 +154,6 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
   const todaysPhotos = photos.filter(p => p.date === selectedDate);
   const todaysSafetyPhotos = safetyPhotos.filter(p => p.date === selectedDate);
   
-  // Image Compression Utility
-  const compressImage = (file: File): Promise<Blob> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 1280; // Optimized width for A4 report
-          const MAX_HEIGHT = 1280;
-          let width = img.width;
-          let height = img.height;
-
-          if (width > height) {
-            if (width > MAX_WIDTH) {
-              height *= MAX_WIDTH / width;
-              width = MAX_WIDTH;
-            }
-          } else {
-            if (height > MAX_HEIGHT) {
-              width *= MAX_HEIGHT / height;
-              height = MAX_HEIGHT;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            reject(new Error("Failed to get canvas context"));
-            return;
-          }
-
-          ctx.drawImage(img, 0, 0, width, height);
-          
-          canvas.toBlob((blob) => {
-            if (blob) resolve(blob);
-            else reject(new Error("Image compression failed"));
-          }, 'image/jpeg', 0.7); // 70% quality JPEG
-        };
-        img.onerror = (err) => reject(err);
-      };
-      reader.onerror = (err) => reject(err);
-    });
-  };
-
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'labor' | 'safety' = 'labor') => {
     if (e.target.files && e.target.files.length > 0) {
       setIsProcessing(true);
@@ -226,41 +179,54 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
         // Process files in batches to avoid overwhelming the system
         const BATCH_SIZE = 5;
         const newPhotos: PhotoEvidence[] = [];
+        const optimizedBase64List: string[] = [];
         
-        for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
-          const batch = validFiles.slice(i, i + BATCH_SIZE);
-          const compressionPromises = batch.map(async (file): Promise<CompressionResult> => {
+        const results = await processInChunks(
+          validFiles,
+          async (file): Promise<CompressionResult & { base64?: string }> => {
             try {
-              const blob = await compressImage(file);
-              return { success: true, blob, file };
+              const baseQuality = uploadQualityPreset === 'low' ? 0.58 : uploadQualityPreset === 'high' ? 0.8 : 0.68;
+              const quality = file.size > 8 * 1024 * 1024
+                ? Math.max(baseQuality - 0.08, 0.5)
+                : file.size > 4 * 1024 * 1024
+                  ? Math.max(baseQuality - 0.03, 0.52)
+                  : baseQuality;
+              const { blob, base64 } = await optimizeImage(file, 1280, 1280, quality);
+              return { success: true, blob, file, base64 };
             } catch (error) {
               return { success: false, error, file };
             }
-          });
-          const results = await Promise.all(compressionPromises);
-          
-          // Process successful compressions and log failures
-          for (const result of results) {
-            if (result.success === false) {
-              console.error(`Failed to compress ${result.file.name}:`, result.error);
-              compressionErrors.push(`"${result.file.name}" 압축 실패: ${result.error instanceof Error ? result.error.message : '알 수 없는 오류'}`);
-              continue;
-            }
-            newPhotos.push({
-                id: crypto.randomUUID(),
-                fileUrl: URL.createObjectURL(result.blob),
-                category: PHOTO_CATEGORIES[0],
-                description: '',
-                location: '',
-                date: selectedDate,
-              });
+          },
+          BATCH_SIZE
+        );
+
+        for (const result of results) {
+          if (result.success === false) {
+            console.error(`Failed to compress ${result.file.name}:`, result.error);
+            compressionErrors.push(`"${result.file.name}" 압축 실패: ${result.error instanceof Error ? result.error.message : '알 수 없는 오류'}`);
+            continue;
           }
+          if (result.base64) optimizedBase64List.push(result.base64);
+          newPhotos.push({
+            id: crypto.randomUUID(),
+            fileUrl: URL.createObjectURL(result.blob),
+            category: PHOTO_CATEGORIES[0],
+            description: '',
+            location: '',
+            date: selectedDate,
+          });
         }
+
+        const estimatedUsage = estimateMemoryUsage(optimizedBase64List);
         
         // Show all errors together if any occurred
         const allErrors = [...validationErrors, ...compressionErrors];
         if (allErrors.length > 0) {
           alert(`다음 파일들을 처리할 수 없습니다:\n\n${allErrors.join('\n')}`);
+        }
+
+        if (estimatedUsage.totalMB > 15) {
+          alert(`⚠️ 이번 업로드 사진의 예상 저장 용량이 ${estimatedUsage.totalMB.toFixed(1)}MB입니다.\n사진 수가 많으면 복구/백업 속도가 느려질 수 있습니다.`);
         }
         
         if (newPhotos.length > 0) {
@@ -429,10 +395,10 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8">
         {/* Left: Labor Input */}
         <div className="space-y-6">
-        <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 h-fit">
+        <div className="bg-white p-4 sm:p-8 rounded-3xl shadow-sm border border-slate-100 h-fit">
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-xl font-bold flex items-center gap-3 text-slate-800">
               <div className="bg-emerald-100 p-2 rounded-xl text-emerald-600">
@@ -473,7 +439,7 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
                 const currentGongsu = attendance[selectedDate]?.[worker.id] || 0;
                 
                 return (
-                  <div key={worker.id} className={`flex items-center justify-between p-4 rounded-2xl border transition-all duration-200 group ${currentGongsu > 0 ? 'bg-indigo-50/50 border-indigo-200 shadow-sm' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
+                  <div key={worker.id} className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl border transition-all duration-200 group ${currentGongsu > 0 ? 'bg-indigo-50/50 border-indigo-200 shadow-sm' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
                     <div className="flex items-center gap-3">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${currentGongsu > 0 ? 'bg-indigo-200 text-indigo-800' : 'bg-slate-100 text-slate-500'}`}>
                         {worker.name.charAt(0)}
@@ -484,18 +450,30 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl">
+                    <div className="flex flex-wrap items-center gap-2 bg-slate-50 p-1 rounded-xl w-full sm:w-auto">
                       <button 
                         onClick={() => updateAttendance(worker.id, currentGongsu === 0.5 ? 0 : 0.5)}
-                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 ${currentGongsu === 0.5 ? 'bg-indigo-600 text-white shadow-md transform scale-105' : 'text-slate-500 hover:bg-slate-200'}`}
+                        className={`flex-1 sm:flex-none min-w-[64px] px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 ${currentGongsu === 0.5 ? 'bg-indigo-600 text-white shadow-md transform scale-105' : 'text-slate-500 hover:bg-slate-200'}`}
                       >
                         0.5
                       </button>
                       <button 
                         onClick={() => updateAttendance(worker.id, currentGongsu === 1.0 ? 0 : 1.0)}
-                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 ${currentGongsu === 1.0 ? 'bg-indigo-600 text-white shadow-md transform scale-105' : 'text-slate-500 hover:bg-slate-200'}`}
+                        className={`flex-1 sm:flex-none min-w-[64px] px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 ${currentGongsu === 1.0 ? 'bg-indigo-600 text-white shadow-md transform scale-105' : 'text-slate-500 hover:bg-slate-200'}`}
                       >
                         1.0
+                      </button>
+                      <button 
+                        onClick={() => updateAttendance(worker.id, currentGongsu === 1.5 ? 0 : 1.5)}
+                        className={`flex-1 sm:flex-none min-w-[64px] px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 ${currentGongsu === 1.5 ? 'bg-indigo-600 text-white shadow-md transform scale-105' : 'text-slate-500 hover:bg-slate-200'}`}
+                      >
+                        1.5
+                      </button>
+                      <button 
+                        onClick={() => updateAttendance(worker.id, currentGongsu === 2.0 ? 0 : 2.0)}
+                        className={`flex-1 sm:flex-none min-w-[64px] px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 ${currentGongsu === 2.0 ? 'bg-indigo-600 text-white shadow-md transform scale-105' : 'text-slate-500 hover:bg-slate-200'}`}
+                      >
+                        2.0
                       </button>
                     </div>
                   </div>
@@ -518,7 +496,7 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
                   filteredSafetyWorkers.map(worker => {
                     const currentGongsu = safetyAttendance[selectedDate]?.[worker.id] || 0;
                     return (
-                      <div key={worker.id} className={`flex items-center justify-between p-4 rounded-2xl border transition-all duration-200 group ${currentGongsu > 0 ? 'bg-orange-50/50 border-orange-200 shadow-sm' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
+                      <div key={worker.id} className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl border transition-all duration-200 group ${currentGongsu > 0 ? 'bg-orange-50/50 border-orange-200 shadow-sm' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
                         <div className="flex items-center gap-3">
                           <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${currentGongsu > 0 ? 'bg-orange-200 text-orange-800' : 'bg-slate-100 text-slate-500'}`}>
                             {worker.name.charAt(0)}
@@ -528,18 +506,30 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
                             <div className="text-xs text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded-full w-fit mt-1">{worker.role}</div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl">
+                        <div className="flex flex-wrap items-center gap-2 bg-slate-50 p-1 rounded-xl w-full sm:w-auto">
                           <button
                             onClick={() => updateSafetyAttendance(worker.id, currentGongsu === 0.5 ? 0 : 0.5)}
-                            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 ${currentGongsu === 0.5 ? 'bg-orange-500 text-white shadow-md transform scale-105' : 'text-slate-500 hover:bg-slate-200'}`}
+                            className={`flex-1 sm:flex-none min-w-[64px] px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 ${currentGongsu === 0.5 ? 'bg-orange-500 text-white shadow-md transform scale-105' : 'text-slate-500 hover:bg-slate-200'}`}
                           >
                             0.5
                           </button>
                           <button
                             onClick={() => updateSafetyAttendance(worker.id, currentGongsu === 1.0 ? 0 : 1.0)}
-                            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 ${currentGongsu === 1.0 ? 'bg-orange-500 text-white shadow-md transform scale-105' : 'text-slate-500 hover:bg-slate-200'}`}
+                            className={`flex-1 sm:flex-none min-w-[64px] px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 ${currentGongsu === 1.0 ? 'bg-orange-500 text-white shadow-md transform scale-105' : 'text-slate-500 hover:bg-slate-200'}`}
                           >
                             1.0
+                          </button>
+                          <button
+                            onClick={() => updateSafetyAttendance(worker.id, currentGongsu === 1.5 ? 0 : 1.5)}
+                            className={`flex-1 sm:flex-none min-w-[64px] px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 ${currentGongsu === 1.5 ? 'bg-orange-500 text-white shadow-md transform scale-105' : 'text-slate-500 hover:bg-slate-200'}`}
+                          >
+                            1.5
+                          </button>
+                          <button
+                            onClick={() => updateSafetyAttendance(worker.id, currentGongsu === 2.0 ? 0 : 2.0)}
+                            className={`flex-1 sm:flex-none min-w-[64px] px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 ${currentGongsu === 2.0 ? 'bg-orange-500 text-white shadow-md transform scale-105' : 'text-slate-500 hover:bg-slate-200'}`}
+                          >
+                            2.0
                           </button>
                         </div>
                       </div>
@@ -554,7 +544,7 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
 
         {/* Right: Photo Input */}
         <div className="space-y-6">
-        <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 h-fit">
+        <div className="bg-white p-4 sm:p-8 rounded-3xl shadow-sm border border-slate-100 h-fit">
            <div className="flex justify-between items-center mb-6">
             <h3 className="text-xl font-bold flex items-center gap-3 text-slate-800">
               <div className="bg-rose-100 p-2 rounded-xl text-rose-600">
@@ -613,7 +603,7 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
         </div>
 
         {setSafetyPhotos && (
-          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 h-fit">
+          <div className="bg-white p-4 sm:p-8 rounded-3xl shadow-sm border border-slate-100 h-fit">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-bold flex items-center gap-3 text-slate-800">
                 <div className="bg-orange-100 p-2 rounded-xl text-orange-600">

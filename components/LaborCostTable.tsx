@@ -3,6 +3,22 @@ import React, { useState, useMemo } from 'react';
 import { Worker, WORKER_ROLES, DailyAttendance } from '../types';
 import { Plus, Trash2, Users, AlertCircle, CalendarDays, ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown, RotateCcw } from 'lucide-react';
 
+// 주민등록번호 뒷자리 마스킹 (개인정보보호법 준수)
+const maskRRN = (rrn: string): string => {
+  if (!rrn) return '-';
+  const trimmed = rrn.replace(/\s/g, '');
+  // Format: XXXXXX-XXXXXXX
+  if (trimmed.includes('-')) {
+    const parts = trimmed.split('-');
+    return `${parts[0]}-*******`;
+  }
+  // No dash: first 6 digits visible
+  if (trimmed.length >= 6) {
+    return `${trimmed.slice(0, 6)}-*******`;
+  }
+  return '*******-*******';
+};
+
 type SortField = 'name' | 'role' | 'daysWorked' | 'dailyRate';
 
 const SORT_OPTIONS: { field: SortField; label: string }[] = [
@@ -52,7 +68,21 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
   };
 
   const updateWorker = (id: string, field: keyof Worker, value: any) => {
-    setWorkers(workers.map(w => w.id === id ? { ...w, [field]: value } : w));
+    setWorkers(workers.map(w => {
+      if (w.id !== id) return w;
+      if (field === 'dailyRate') {
+        const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+        return {
+          ...w,
+          dailyRate: value,
+          dailyRateHistory: {
+            ...(w.dailyRateHistory || {}),
+            [monthKey]: Number(value) || 0,
+          },
+        };
+      }
+      return { ...w, [field]: value };
+    }));
   };
 
   const removeWorker = (id: string) => {
@@ -158,7 +188,7 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
                   <div className="col-span-1 border-r border-slate-300 p-1.5 text-center font-bold">성명</div>
                   <div className="col-span-2 border-r border-slate-300 p-1.5 text-center bg-white whitespace-nowrap overflow-hidden text-ellipsis">{worker.name}</div>
                   <div className="col-span-2 border-r border-slate-300 p-1.5 text-center font-bold">주민등록번호</div>
-                  <div className="col-span-2 border-r border-slate-300 p-1.5 text-center bg-white">{worker.rrn || '-'}</div>
+                  <div className="col-span-2 border-r border-slate-300 p-1.5 text-center bg-white tracking-wider">{maskRRN(worker.rrn)}</div>
                   <div className="col-span-1 border-r border-slate-300 p-1.5 text-center font-bold">주소</div>
                   <div className="col-span-4 p-1.5 bg-white text-left px-2 truncate">{worker.address || '-'}</div>
                 </div>
@@ -175,7 +205,7 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
                         <div key={day} className="border-r border-slate-200 last:border-r-0">
                           <div className="bg-slate-50 border-b border-slate-200 text-[7px] h-4 flex items-center justify-center text-slate-500">{day}</div>
                           <div className="h-6 flex items-center justify-center font-bold text-slate-800 text-[9px] tracking-tighter">
-                            {val === 1 ? '1' : val === 0.5 ? '0.5' : ''}
+                            {val ? (val % 1 === 0 ? String(val) : val.toFixed(1)) : ''}
                           </div>
                         </div>
                        );
@@ -347,6 +377,13 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-right font-mono focus:border-indigo-500 outline-none bg-white"
                       placeholder="0"
                     />
+                    <div className="mt-1 text-[10px] text-slate-400 leading-relaxed min-h-[1rem]">
+                      {Object.entries(worker.dailyRateHistory || {})
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .slice(-3)
+                        .map(([monthKey, rate]) => `${monthKey}: ${Number(rate).toLocaleString()}원`)
+                        .join(' · ') || '월별 단가 이력 없음'}
+                    </div>
                   </div>
                   <div>
                      <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">출력공수 (자동)</label>

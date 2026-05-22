@@ -5,8 +5,10 @@ import { LaborCostTable } from './components/LaborCostTable';
 import { SafetyCostTable } from './components/SafetyCostTable';
 import { PhotoLedger } from './components/PhotoLedger';
 import { DailyLogManager } from './components/DailyLogManager';
+import { RestoreOptionsModal, RestoreSelections, RestoreSummary } from './components/RestoreOptionsModal';
 import { ProjectInfo, Worker, PhotoEvidence, DailyAttendance, SafetyItem, WORKER_ROLES } from './types';
 import { Printer, Layout, FileText, ShieldCheck, CalendarCheck, HelpCircle, BarChart3, ChevronRight, Clock, Download, Upload, RotateCcw, ShoppingCart, Loader2, Save, FilePlus, ArrowLeftRight, Trash2 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { 
   validatePhotoData, 
   createBlobUrlFromBase64, 
@@ -14,6 +16,7 @@ import {
   getPhotoStats,
   base64ToBlob
 } from './utils/photoOptimization';
+import { clearPhotoState, loadPhotoState, savePhotoState } from './utils/photoPersistence';
 
 const GeminiAssistant = lazy(() => import('./components/GeminiAssistant').then(module => ({ default: module.GeminiAssistant })));
 const UserGuide = lazy(() => import('./components/UserGuide').then(module => ({ default: module.UserGuide })));
@@ -38,6 +41,36 @@ const INITIAL_PROJECT_INFO: ProjectInfo = {
 
 const DRAFT_KEY = 'safetydoc_draft_v1';
 
+// 주민등록번호 뒷자리 마스킹 - LocalStorage 평문 저장 방지
+const maskRRN = (rrn: string): string => {
+  if (!rrn) return '';
+  const trimmed = rrn.replace(/\s/g, '');
+  if (trimmed.includes('-')) return `${trimmed.split('-')[0]}-*******`;
+  if (trimmed.length >= 6) return `${trimmed.slice(0, 6)}-*******`;
+  return '*******-*******';
+};
+
+const maskWorkersRRN = (workers: Worker[]): Worker[] =>
+  workers.map(w => ({ ...w, rrn: maskRRN(w.rrn) }));
+
+const getMonthKey = (year: number, month: number) => `${year}-${String(month).padStart(2, '0')}`;
+
+interface RestoreModalState {
+  fileName: string;
+  parsed: any;
+  summary: RestoreSummary;
+  selections: RestoreSelections;
+}
+
+interface MonthlySnapshot {
+  laborCost: number;
+  safetyWorkerCost: number;
+  materialCost: number;
+  totalCost: number;
+  photoCount: number;
+  updatedAt: number;
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState<'setup' | 'daily' | 'preview' | 'guide'>('guide');
   const [projectInfo, setProjectInfo] = useState<ProjectInfo>(INITIAL_PROJECT_INFO);
@@ -55,8 +88,13 @@ function App() {
   const [showLaborCost, setShowLaborCost] = useState(true); // Toggle for 유도원/감시자 인건비 section in Report
   const [showSafetyCost, setShowSafetyCost] = useState(true); // Toggle for 안전시설 인건비 section in Report
   const [showSafetyItems, setShowSafetyItems] = useState(true); // Toggle for 안전시설 재료비 내역(품목) in Report
+  const [annualBudget, setAnnualBudget] = useState<number>(0); // 연간 계상액(예산)
+  const [uploadQualityPreset, setUploadQualityPreset] = useState<'low' | 'balanced' | 'high'>('balanced');
+  const [monthlySnapshots, setMonthlySnapshots] = useState<Record<string, MonthlySnapshot>>({});
+  const [restoreModalState, setRestoreModalState] = useState<RestoreModalState | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const photoStateRef = useRef<{ laborPhotos: PhotoEvidence[]; safetyPhotos: PhotoEvidence[] }>({ laborPhotos: [], safetyPhotos: [] });
 
   // Clock for Header (KST)
   useEffect(() => {
@@ -105,6 +143,7 @@ function App() {
       if (
         projectInfo.siteName || 
         projectInfo.managerName || // Track manager name changes too
+        annualBudget > 0 ||
         workers.length > 0 || 
         safetyWorkers.length > 0 ||
         safetyItems.length > 0 || 
@@ -112,11 +151,14 @@ function App() {
       ) {
         const draft = {
           projectInfo,
-          workers,
+          workers: maskWorkersRRN(workers),
           attendance,
-          safetyWorkers,
+          safetyWorkers: maskWorkersRRN(safetyWorkers),
           safetyAttendance,
           safetyItems,
+          annualBudget,
+          uploadQualityPreset,
+          monthlySnapshots,
           // Note: Photos are excluded because LocalStorage has 5MB limit and blob URLs are not persistent
           updatedAt: new Date().getTime()
         };
@@ -125,7 +167,7 @@ function App() {
     }, 1000); // Debounce 1s
 
     return () => clearTimeout(timer);
-  }, [projectInfo, workers, attendance, safetyWorkers, safetyAttendance, safetyItems]);
+  }, [projectInfo, workers, attendance, safetyWorkers, safetyAttendance, safetyItems, annualBudget, uploadQualityPreset, monthlySnapshots]);
 
   // 2. Check for draft on mount
   useEffect(() => {
@@ -137,13 +179,16 @@ function App() {
         if (parsed.projectInfo && (parsed.workers || parsed.safetyItems)) {
             // Delay confirm to allow UI to paint first
             setTimeout(() => {
-                if (confirm('이전에 작성 중이던 내용이 발견되었습니다. 복구하시겠습니까?\n(주의: 사진 데이터는 브라우저 보안상 자동 저장되지 않습니다)')) {
+              if (confirm('이전에 작성 중이던 내용이 발견되었습니다. 복구하시겠습니까?\n(사진 데이터는 별도 안전 저장소에서 자동 복구됩니다)')) {
                     setProjectInfo(parsed.projectInfo);
                     setWorkers(parsed.workers || []);
                     setAttendance(parsed.attendance || {});
                     setSafetyWorkers(parsed.safetyWorkers || []);
                     setSafetyAttendance(parsed.safetyAttendance || {});
                     setSafetyItems(parsed.safetyItems || []);
+                    setAnnualBudget(Number(parsed.annualBudget || 0));
+                    setUploadQualityPreset(parsed.uploadQualityPreset || 'balanced');
+                    setMonthlySnapshots(parsed.monthlySnapshots || {});
                     setActiveTab('setup'); // Move to setup tab
                 } else {
                     // If user declines, clear the draft so it doesn't ask again immediately
@@ -157,6 +202,72 @@ function App() {
       }
     }
   }, []);
+
+  // 사진 자동 복구 (IndexedDB)
+  useEffect(() => {
+    let isCancelled = false;
+
+    const restorePhotosFromIndexedDb = async () => {
+      try {
+        const savedPhotoState = await loadPhotoState();
+        if (!savedPhotoState || isCancelled) return;
+
+        if (savedPhotoState.laborPhotos?.length > 0) {
+          setLaborPhotos(prev => prev.length > 0 ? prev : savedPhotoState.laborPhotos);
+        }
+        if (savedPhotoState.safetyPhotos?.length > 0) {
+          setSafetyPhotos(prev => prev.length > 0 ? prev : savedPhotoState.safetyPhotos);
+        }
+      } catch (error) {
+        console.error('사진 자동 복구 실패', error);
+      }
+    };
+
+    restorePhotosFromIndexedDb();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  // 사진 자동 저장 (IndexedDB)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      savePhotoState(laborPhotos, safetyPhotos).catch(error => {
+        console.error('사진 자동 저장 실패', error);
+      });
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [laborPhotos, safetyPhotos]);
+
+  useEffect(() => {
+    photoStateRef.current = { laborPhotos, safetyPhotos };
+  }, [laborPhotos, safetyPhotos]);
+
+  // 앱 언마운트 시 blob URL 정리
+  useEffect(() => {
+    return () => {
+      [...photoStateRef.current.laborPhotos, ...photoStateRef.current.safetyPhotos].forEach(photo => {
+        if (photo.fileUrl && photo.fileUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(photo.fileUrl);
+        }
+      });
+    };
+  }, []);
+
+  // 월 변경 시 근로자 단가 이력에서 해당 월 단가 자동 반영
+  useEffect(() => {
+    const monthKey = getMonthKey(projectInfo.year, projectInfo.month);
+    setWorkers(prev => prev.map(w => {
+      const monthlyRate = w.dailyRateHistory?.[monthKey];
+      return typeof monthlyRate === 'number' ? { ...w, dailyRate: monthlyRate } : w;
+    }));
+    setSafetyWorkers(prev => prev.map(w => {
+      const monthlyRate = w.dailyRateHistory?.[monthKey];
+      return typeof monthlyRate === 'number' ? { ...w, dailyRate: monthlyRate } : w;
+    }));
+  }, [projectInfo.year, projectInfo.month]);
 
   // Calculate daysWorked from attendance
   useEffect(() => {
@@ -405,11 +516,14 @@ function App() {
         },
         data: {
           projectInfo,
-          workers,
+          workers: maskWorkersRRN(workers),
           attendance,
-          safetyWorkers,
+          safetyWorkers: maskWorkersRRN(safetyWorkers),
           safetyAttendance,
           safetyItems,
+          annualBudget,
+          uploadQualityPreset,
+          monthlySnapshots,
           laborPhotos: laborPhotosWithBase64,
           safetyPhotos: safetyPhotosWithBase64
         }
@@ -503,138 +617,31 @@ function App() {
               return;
             }
 
-            // --- 섹션별 선택 복구 ---
-            const backupWorkerCount = Array.isArray(parsed.data.workers) ? parsed.data.workers.length : 0;
-            const backupSafetyWorkerCount = Array.isArray(parsed.data.safetyWorkers) ? parsed.data.safetyWorkers.length : 0;
-            const backupSafetyCount = Array.isArray(parsed.data.safetyItems) ? parsed.data.safetyItems.length : 0;
-            // 이전 버전 호환: laborPhotos가 없으면 photos를 사용
-            const backupLaborPhotoCount = Array.isArray(parsed.data.laborPhotos) ? parsed.data.laborPhotos.length :
-                                          (Array.isArray(parsed.data.photos) ? parsed.data.photos.length : 0);
-            const backupSafetyPhotoCount = Array.isArray(parsed.data.safetyPhotos) ? parsed.data.safetyPhotos.length : 0;
-            const backupSiteName = parsed.data.projectInfo?.siteName || '미입력';
-            const backupAttendanceDays = parsed.data.attendance ? Object.keys(parsed.data.attendance).length : 0;
-            const backupSafetyAttendanceDays = parsed.data.safetyAttendance ? Object.keys(parsed.data.safetyAttendance).length : 0;
+            const summary: RestoreSummary = {
+              siteName: parsed.data.projectInfo?.siteName || '미입력',
+              workerCount: Array.isArray(parsed.data.workers) ? parsed.data.workers.length : 0,
+              laborAttendanceDays: parsed.data.attendance ? Object.keys(parsed.data.attendance).length : 0,
+              laborPhotoCount: Array.isArray(parsed.data.laborPhotos) ? parsed.data.laborPhotos.length : (Array.isArray(parsed.data.photos) ? parsed.data.photos.length : 0),
+              safetyWorkerCount: Array.isArray(parsed.data.safetyWorkers) ? parsed.data.safetyWorkers.length : 0,
+              safetyAttendanceDays: parsed.data.safetyAttendance ? Object.keys(parsed.data.safetyAttendance).length : 0,
+              safetyPhotoCount: Array.isArray(parsed.data.safetyPhotos) ? parsed.data.safetyPhotos.length : 0,
+              safetyItemCount: Array.isArray(parsed.data.safetyItems) ? parsed.data.safetyItems.length : 0,
+            };
 
-            // 유도원/감시자 인건비 섹션 복구 여부
-            const restoreLabor = confirm(
-              `[1/2] 유도원 및 감시자 인건비 복구\n\n` +
-              `백업 파일 정보:\n` +
-              `• 공사명: ${backupSiteName}\n` +
-              `• 근로자: ${backupWorkerCount}명\n` +
-              `• 증빙 사진: ${backupLaborPhotoCount}장\n\n` +
-              `현장 기본 정보와 유도원/감시자 인건비(근로자 목록)를\n` +
-              `이 백업 파일로 복구하시겠습니까?\n\n` +
-              `(취소: 현재 데이터 유지)`
-            );
-
-            // 유도원/감시자 출력공수(일일 출역 기록) 복구 여부
-            const restoreLaborAttendance = restoreLabor && backupAttendanceDays > 0 && confirm(
-              `[1-a/2] 유도원 및 감시자 출력공수(일일 출역 기록) 복구\n\n` +
-              `• 출역 날짜 수: ${backupAttendanceDays}일\n\n` +
-              `백업 파일의 출역 기록(출력공수)도 함께 복구하시겠습니까?\n\n` +
-              `• 확인: 출력공수 포함하여 복구\n` +
-              `• 취소: 투입인력(근로자 목록)만 복구, 출력공수는 0으로 초기화`
-            );
-
-            // 유도원/감시자 증빙 사진 복구 여부 (투입인력 복구를 선택한 경우에만 질문)
-            const restoreLaborPhotos = restoreLabor && backupLaborPhotoCount > 0 && confirm(
-              `[1-b/2] 유도원 및 감시자 증빙 사진 복구\n\n` +
-              `• 증빙 사진: ${backupLaborPhotoCount}장\n\n` +
-              `증빙 사진도 함께 복구하시겠습니까?\n` +
-              `(취소: 투입인력 값만 복구, 증빙 사진 제외)`
-            );
-
-            // 안전시설 인건비 섹션 복구 여부
-            const restoreSafety = confirm(
-              `[2/2] 안전시설 인건비 복구\n\n` +
-              `백업 파일 정보:\n` +
-              `• 안전시설 근로자: ${backupSafetyWorkerCount}명\n` +
-              `• 안전시설 품목: ${backupSafetyCount}개\n` +
-              `• 증빙 사진: ${backupSafetyPhotoCount}장\n\n` +
-              `안전시설 인건비 근로자 목록·품목 내역을\n` +
-              `이 백업 파일로 복구하시겠습니까?\n\n` +
-              `(취소: 현재 데이터 유지)`
-            );
-
-            // 안전시설 출력공수(일일 출역 기록) 복구 여부
-            const restoreSafetyAttendance = restoreSafety && backupSafetyAttendanceDays > 0 && confirm(
-              `[2-a/2] 안전시설 출력공수(일일 출역 기록) 복구\n\n` +
-              `• 출역 날짜 수: ${backupSafetyAttendanceDays}일\n\n` +
-              `백업 파일의 출역 기록(출력공수)도 함께 복구하시겠습니까?\n\n` +
-              `• 확인: 출력공수 포함하여 복구\n` +
-              `• 취소: 투입인력(근로자 목록)만 복구, 출력공수는 0으로 초기화`
-            );
-
-            // 안전시설 증빙 사진 복구 여부 (투입인력 복구를 선택한 경우에만 질문)
-            const restoreSafetyPhotos = restoreSafety && backupSafetyPhotoCount > 0 && confirm(
-              `[2-b/2] 안전시설 증빙 사진 복구\n\n` +
-              `• 증빙 사진: ${backupSafetyPhotoCount}장\n\n` +
-              `증빙 사진도 함께 복구하시겠습니까?\n` +
-              `(취소: 투입인력 값만 복구, 증빙 사진 제외)`
-            );
-
-            if (!restoreLabor && !restoreSafety) {
-              alert("복구할 항목이 없습니다. 작업이 취소되었습니다.");
-              return;
-            }
-
-            // Clean up existing blob URLs for each section being restored
-            if (restoreLabor && restoreLaborPhotos) {
-              laborPhotos.forEach(p => {
-                if (p.fileUrl && p.fileUrl.startsWith('blob:')) URL.revokeObjectURL(p.fileUrl);
-              });
-            }
-            if (restoreSafety && restoreSafetyPhotos) {
-              safetyPhotos.forEach(p => {
-                if (p.fileUrl && p.fileUrl.startsWith('blob:')) URL.revokeObjectURL(p.fileUrl);
-              });
-            }
-
-            // Restore selected sections
-            if (restoreLabor) {
-              setProjectInfo({
-                ...INITIAL_PROJECT_INFO,
-                ...parsed.data.projectInfo
-              });
-              setWorkers(Array.isArray(parsed.data.workers) ? parsed.data.workers : []);
-              // 출력공수(일일 출역 기록) 복구 여부에 따라 조건부 처리
-              if (restoreLaborAttendance) {
-                setAttendance(parsed.data.attendance && typeof parsed.data.attendance === 'object' ? parsed.data.attendance : {});
-              } else {
-                setAttendance({});
+            setRestoreModalState({
+              fileName: file.name,
+              parsed,
+              summary,
+              selections: {
+                mode: 'overwrite',
+                restoreLabor: summary.workerCount > 0,
+                restoreLaborAttendance: summary.laborAttendanceDays > 0,
+                restoreLaborPhotos: summary.laborPhotoCount > 0,
+                restoreSafety: summary.safetyWorkerCount > 0 || summary.safetyItemCount > 0,
+                restoreSafetyAttendance: summary.safetyAttendanceDays > 0,
+                restoreSafetyPhotos: summary.safetyPhotoCount > 0,
               }
-              // 이전 버전 호환: laborPhotos가 없으면 photos 사용
-              if (restoreLaborPhotos) {
-                restorePhotosWithValidation(
-                  Array.isArray(parsed.data.laborPhotos) ? parsed.data.laborPhotos :
-                  (Array.isArray(parsed.data.photos) ? parsed.data.photos : []),
-                  setLaborPhotos
-                );
-              }
-            }
-
-            if (restoreSafety) {
-              setSafetyWorkers(Array.isArray(parsed.data.safetyWorkers) ? parsed.data.safetyWorkers : []);
-              // 출력공수(일일 출역 기록) 복구 여부에 따라 조건부 처리
-              if (restoreSafetyAttendance) {
-                setSafetyAttendance(parsed.data.safetyAttendance && typeof parsed.data.safetyAttendance === 'object' ? parsed.data.safetyAttendance : {});
-              } else {
-                setSafetyAttendance({});
-              }
-              setSafetyItems(Array.isArray(parsed.data.safetyItems) ? parsed.data.safetyItems : []);
-              // 안전시설 증빙 사진 복구
-              if (restoreSafetyPhotos) {
-                restorePhotosWithValidation(
-                  Array.isArray(parsed.data.safetyPhotos) ? parsed.data.safetyPhotos : [],
-                  setSafetyPhotos
-                );
-              }
-            }
-
-            const restoredSections: string[] = [];
-            if (restoreLabor) restoredSections.push(`유도원/감시자 인건비 (근로자 ${backupWorkerCount}명${restoreLaborAttendance ? `, 출역 날짜 ${backupAttendanceDays}일` : ', 출력공수 초기화'}${restoreLaborPhotos ? `, 사진 ${backupLaborPhotoCount}장` : ', 사진 제외'})`);
-            if (restoreSafety) restoredSections.push(`안전시설 인건비 (근로자 ${backupSafetyWorkerCount}명, 품목 ${backupSafetyCount}개${restoreSafetyAttendance ? `, 출역 날짜 ${backupSafetyAttendanceDays}일` : ', 출력공수 초기화'}${restoreSafetyPhotos ? `, 사진 ${backupSafetyPhotoCount}장` : ', 사진 제외'})`);
-            alert(`✅ 복구가 완료되었습니다.\n\n복구된 항목:\n${restoredSections.map(s => `• ${s}`).join('\n')}`);
+            });
           }
         } catch (error) {
           console.error("Restore failed:", error);
@@ -649,13 +656,128 @@ function App() {
       fileReader.onerror = () => {
         alert("파일 읽기에 실패했습니다. 다시 시도하세요.");
       };
+
+      e.target.value = '';
     }
+  };
+
+  const applyRestoreSelections = async () => {
+    if (!restoreModalState) return;
+
+    const { parsed, summary, selections } = restoreModalState;
+    const isMergeMode = selections.mode === 'merge';
+    const mergeWorkers = (current: Worker[], incoming: Worker[]) => {
+      const merged = new Map(current.map(worker => [worker.id, worker]));
+      incoming.forEach(worker => {
+        const previous = merged.get(worker.id) || {};
+        merged.set(worker.id, { ...previous, ...worker });
+      });
+      return Array.from(merged.values()) as Worker[];
+    };
+    const mergeAttendance = (current: DailyAttendance, incoming: DailyAttendance) => {
+      const merged: DailyAttendance = { ...current };
+      Object.entries(incoming || {}).forEach(([date, entries]) => {
+        merged[date] = {
+          ...(merged[date] || {}),
+          ...(entries || {}),
+        };
+      });
+      return merged;
+    };
+    const mergeItems = (current: SafetyItem[], incoming: SafetyItem[]) => {
+      const merged = new Map(current.map(item => [item.id, item]));
+      incoming.forEach(item => merged.set(item.id, item));
+      return Array.from(merged.values());
+    };
+    const mergePhotos = (current: PhotoEvidence[], incoming: PhotoEvidence[]) => {
+      const merged = new Map(current.map(photo => [photo.id, photo]));
+      incoming.forEach(photo => merged.set(photo.id, photo));
+      return Array.from(merged.values());
+    };
+
+    if (!selections.restoreLabor && !selections.restoreSafety) {
+      alert('복구할 항목을 하나 이상 선택하세요.');
+      return;
+    }
+
+    setMonthlySnapshots(prev => {
+      const incomingSnapshots = restoreModalState.parsed.data.monthlySnapshots;
+      if (!incomingSnapshots || typeof incomingSnapshots !== 'object') return prev;
+      return isMergeMode ? { ...prev, ...incomingSnapshots } : incomingSnapshots;
+    });
+
+    if (!isMergeMode && selections.restoreLabor && selections.restoreLaborPhotos) {
+      laborPhotos.forEach(p => {
+        if (p.fileUrl && p.fileUrl.startsWith('blob:')) URL.revokeObjectURL(p.fileUrl);
+      });
+    }
+    if (!isMergeMode && selections.restoreSafety && selections.restoreSafetyPhotos) {
+      safetyPhotos.forEach(p => {
+        if (p.fileUrl && p.fileUrl.startsWith('blob:')) URL.revokeObjectURL(p.fileUrl);
+      });
+    }
+
+    if (selections.restoreLabor) {
+      setProjectInfo(prev => isMergeMode ? { ...prev, ...parsed.data.projectInfo } : {
+        ...INITIAL_PROJECT_INFO,
+        ...parsed.data.projectInfo,
+      });
+      setAnnualBudget(prev => isMergeMode ? (Number(parsed.data.annualBudget || 0) || prev) : Number(parsed.data.annualBudget || 0));
+      setUploadQualityPreset(prev => isMergeMode ? (parsed.data.uploadQualityPreset || prev) : (parsed.data.uploadQualityPreset || 'balanced'));
+      setWorkers(prev => {
+        const incomingWorkers = Array.isArray(parsed.data.workers) ? parsed.data.workers : [];
+        return isMergeMode ? mergeWorkers(prev, incomingWorkers) : incomingWorkers;
+      });
+      setAttendance(prev => {
+        const incomingAttendance = selections.restoreLaborAttendance && parsed.data.attendance && typeof parsed.data.attendance === 'object' ? parsed.data.attendance : {};
+        return isMergeMode ? mergeAttendance(prev, incomingAttendance) : incomingAttendance;
+      });
+
+      if (selections.restoreLaborPhotos) {
+        const restored = await restorePhotosWithValidation(
+          Array.isArray(parsed.data.laborPhotos) ? parsed.data.laborPhotos : (Array.isArray(parsed.data.photos) ? parsed.data.photos : []),
+          undefined
+        );
+        setLaborPhotos(prev => isMergeMode ? mergePhotos(prev, restored) : restored);
+      }
+    }
+
+    if (selections.restoreSafety) {
+      setSafetyWorkers(prev => {
+        const incomingWorkers = Array.isArray(parsed.data.safetyWorkers) ? parsed.data.safetyWorkers : [];
+        return isMergeMode ? mergeWorkers(prev, incomingWorkers) : incomingWorkers;
+      });
+      setSafetyAttendance(prev => {
+        const incomingAttendance = selections.restoreSafetyAttendance && parsed.data.safetyAttendance && typeof parsed.data.safetyAttendance === 'object' ? parsed.data.safetyAttendance : {};
+        return isMergeMode ? mergeAttendance(prev, incomingAttendance) : incomingAttendance;
+      });
+      setSafetyItems(prev => {
+        const incomingItems = Array.isArray(parsed.data.safetyItems) ? parsed.data.safetyItems : [];
+        return isMergeMode ? mergeItems(prev, incomingItems) : incomingItems;
+      });
+
+      if (selections.restoreSafetyPhotos) {
+        const restored = await restorePhotosWithValidation(
+          Array.isArray(parsed.data.safetyPhotos) ? parsed.data.safetyPhotos : [],
+          undefined
+        );
+        setSafetyPhotos(prev => isMergeMode ? mergePhotos(prev, restored) : restored);
+      }
+    }
+
+    const restoredSections: string[] = [];
+    if (selections.restoreLabor) restoredSections.push(`유도원/감시자 인건비 (근로자 ${summary.workerCount}명${selections.restoreLaborAttendance ? `, 출역 날짜 ${summary.laborAttendanceDays}일` : ', 출력공수 초기화'}${selections.restoreLaborPhotos ? `, 사진 ${summary.laborPhotoCount}장` : ', 사진 제외'})`);
+    if (selections.restoreSafety) restoredSections.push(`안전시설 인건비 (근로자 ${summary.safetyWorkerCount}명, 품목 ${summary.safetyItemCount}개${selections.restoreSafetyAttendance ? `, 출역 날짜 ${summary.safetyAttendanceDays}일` : ', 출력공수 초기화'}${selections.restoreSafetyPhotos ? `, 사진 ${summary.safetyPhotoCount}장` : ', 사진 제외'})`);
+
+    setRestoreModalState(null);
+    setActiveTab('setup');
+    alert(`✅ 복구가 완료되었습니다.\n\n복구 방식: ${isMergeMode ? '병합' : '덮어쓰기'}\n\n복구된 항목:\n${restoredSections.map(s => `• ${s}`).join('\n')}`);
   };
 
   // 사진 복구 - 추가된 안전성 검증
   const restorePhotosWithValidation = async (
     photosToRestore: PhotoEvidence[],
-    setPhotosFn: React.Dispatch<React.SetStateAction<PhotoEvidence[]>>
+    setPhotosFn?: React.Dispatch<React.SetStateAction<PhotoEvidence[]>>
   ) => {
     const restoredPhotos: PhotoEvidence[] = [];
     const failedPhotos: string[] = [];
@@ -705,13 +827,17 @@ function App() {
       await new Promise(resolve => setTimeout(resolve, 10));
     }
 
-    setPhotosFn(restoredPhotos);
+    if (setPhotosFn) {
+      setPhotosFn(restoredPhotos);
+    }
 
     // 복구 결과 알림
     if (failedPhotos.length > 0) {
       console.warn(`${failedPhotos.length}개의 사진이 복구되지 않았습니다:`, failedPhotos);
       alert(`⚠️ ${restoredPhotos.length}/${photosToRestore.length}개의 사진이 복구되었습니다.\n(${failedPhotos.length}개는 손상되었거나 복구할 수 없습니다)`);
     }
+
+    return restoredPhotos;
   };
 
   // New Feature: Reset only monthly data (keep workers)
@@ -749,6 +875,8 @@ function App() {
            };
         });
 
+        clearPhotoState().catch(error => console.error('사진 저장소 초기화 실패', error));
+
         alert("월간 데이터가 초기화되었습니다.\n근로자 명단은 유지됩니다.");
         setActiveTab('daily');
     }
@@ -775,9 +903,12 @@ function App() {
       setSafetyItems([]);
       setLaborPhotos([]);
       setSafetyPhotos([]);
+      setAnnualBudget(0);
+      setMonthlySnapshots({});
       
       // Also clear local storage draft
       localStorage.removeItem(DRAFT_KEY);
+      clearPhotoState().catch(error => console.error('사진 저장소 초기화 실패', error));
       
       alert("초기화되었습니다.");
     }
@@ -882,6 +1013,167 @@ function App() {
   const totalSafetyCost = totalSafetyWorkersCost + totalMaterialCost;
   const totalCost = totalLaborCost + totalSafetyCost;
   const totalPhotos = laborPhotos.length + safetyPhotos.length;
+  const executionRate = annualBudget > 0 ? Math.min((totalCost / annualBudget) * 100, 999.9) : 0;
+  const remainingBudget = Math.max(annualBudget - totalCost, 0);
+  const currentMonthKey = getMonthKey(projectInfo.year, projectInfo.month);
+  const sortedMonthlySnapshots = Object.entries(monthlySnapshots)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-6);
+  const maxMonthlyTotal = Math.max(...sortedMonthlySnapshots.map(([, snapshot]) => snapshot.totalCost), 1);
+
+  useEffect(() => {
+    setMonthlySnapshots(prev => ({
+      ...prev,
+      [currentMonthKey]: {
+        laborCost: totalLaborCost,
+        safetyWorkerCost: totalSafetyWorkersCost,
+        materialCost: totalMaterialCost,
+        totalCost,
+        photoCount: totalPhotos,
+        updatedAt: Date.now(),
+      }
+    }));
+  }, [currentMonthKey, totalLaborCost, totalSafetyWorkersCost, totalMaterialCost, totalCost, totalPhotos]);
+
+  const handleExportExcel = () => {
+    const workbook = XLSX.utils.book_new();
+
+    const summarySheet = XLSX.utils.json_to_sheet([
+      {
+        현장명: projectInfo.siteName || '',
+        귀속연도: projectInfo.year,
+        귀속월: projectInfo.month,
+        업체명: projectInfo.companyName || '',
+        현장대리인: projectInfo.managerName || '',
+        안전팀장: projectInfo.safetyManagerName || '',
+        연간계상액: annualBudget,
+        총인건비: totalLaborCost + totalSafetyWorkersCost,
+        총재료비: totalMaterialCost,
+        총집행액: totalCost,
+        집행률: `${executionRate.toFixed(1)}%`,
+        잔액: remainingBudget,
+        사진품질프리셋: uploadQualityPreset === 'low' ? '저용량' : uploadQualityPreset === 'high' ? '고품질' : '표준',
+      }
+    ]);
+
+    const laborSheet = XLSX.utils.json_to_sheet(
+      [
+      ...workers.map(worker => ({
+        구분: '유도원/감시자',
+        성명: worker.name,
+        직종: worker.role,
+        주민등록번호: maskRRN(worker.rrn),
+        주소: worker.address,
+        출력공수: worker.daysWorked,
+        일단가: worker.dailyRate,
+        노무비총액: worker.daysWorked * worker.dailyRate,
+      })),
+      {
+        구분: '합계',
+        성명: '',
+        직종: '',
+        주민등록번호: '',
+        주소: '',
+        출력공수: workers.reduce((sum, worker) => sum + worker.daysWorked, 0),
+        일단가: '',
+        노무비총액: totalLaborCost,
+      }
+      ]
+    );
+
+    const safetyWorkerSheet = XLSX.utils.json_to_sheet(
+      [
+      ...safetyWorkers.map(worker => ({
+        구분: '안전시설',
+        성명: worker.name,
+        직종: worker.role,
+        주민등록번호: maskRRN(worker.rrn),
+        주소: worker.address,
+        출력공수: worker.daysWorked,
+        일단가: worker.dailyRate,
+        노무비총액: worker.daysWorked * worker.dailyRate,
+      })),
+      {
+        구분: '합계',
+        성명: '',
+        직종: '',
+        주민등록번호: '',
+        주소: '',
+        출력공수: safetyWorkers.reduce((sum, worker) => sum + worker.daysWorked, 0),
+        일단가: '',
+        노무비총액: totalSafetyWorkersCost,
+      }
+      ]
+    );
+
+    const itemSheet = XLSX.utils.json_to_sheet(
+      [
+      ...safetyItems.map(item => ({
+        품명: item.name,
+        규격: item.spec,
+        단위: item.unit,
+        수량: item.quantity,
+        단가: item.unitPrice,
+        금액: item.quantity * item.unitPrice,
+        비고: item.note,
+      })),
+      {
+        품명: '합계',
+        규격: '',
+        단위: '',
+        수량: safetyItems.reduce((sum, item) => sum + item.quantity, 0),
+        단가: '',
+        금액: totalMaterialCost,
+        비고: '',
+      }
+      ]
+    );
+
+    const monthlyTrendSheet = XLSX.utils.json_to_sheet(
+      Object.entries(monthlySnapshots)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([monthKey, snapshot]) => ({
+          월: monthKey,
+          유도원인건비: snapshot.laborCost,
+          안전시설인건비: snapshot.safetyWorkerCost,
+          재료비: snapshot.materialCost,
+          총집행액: snapshot.totalCost,
+          사진수: snapshot.photoCount,
+          최종갱신: new Date(snapshot.updatedAt).toLocaleString('ko-KR'),
+        }))
+    );
+
+    summarySheet['!cols'] = [
+      { wch: 18 }, { wch: 10 }, { wch: 8 }, { wch: 18 }, { wch: 12 }, { wch: 12 },
+      { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 14 }
+    ];
+    laborSheet['!cols'] = [
+      { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 18 }, { wch: 24 }, { wch: 10 }, { wch: 12 }, { wch: 14 }
+    ];
+    safetyWorkerSheet['!cols'] = [
+      { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 18 }, { wch: 24 }, { wch: 10 }, { wch: 12 }, { wch: 14 }
+    ];
+    itemSheet['!cols'] = [
+      { wch: 18 }, { wch: 16 }, { wch: 8 }, { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 20 }
+    ];
+    monthlyTrendSheet['!cols'] = [
+      { wch: 10 }, { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 20 }
+    ];
+    summarySheet['!autofilter'] = { ref: 'A1:M2' };
+    laborSheet['!autofilter'] = { ref: `A1:H${workers.length + 2}` };
+    safetyWorkerSheet['!autofilter'] = { ref: `A1:H${safetyWorkers.length + 2}` };
+    itemSheet['!autofilter'] = { ref: `A1:G${safetyItems.length + 2}` };
+    monthlyTrendSheet['!autofilter'] = { ref: `A1:G${Object.keys(monthlySnapshots).length + 1}` };
+
+    XLSX.utils.book_append_sheet(workbook, summarySheet, '요약');
+    XLSX.utils.book_append_sheet(workbook, laborSheet, '유도원인건비');
+    XLSX.utils.book_append_sheet(workbook, safetyWorkerSheet, '안전시설인건비');
+    XLSX.utils.book_append_sheet(workbook, itemSheet, '안전시설재료비');
+    XLSX.utils.book_append_sheet(workbook, monthlyTrendSheet, '월별추이');
+
+    const safeSiteName = (projectInfo.siteName || '무제').replace(/[/\\?%*:|"<>]/g, '-');
+    XLSX.writeFile(workbook, `세이프닥_집행내역_${safeSiteName}_${getMonthKey(projectInfo.year, projectInfo.month)}.xlsx`);
+  };
 
   // Unique worker roles for photo 공종 category options
   const laborWorkerRoles = [...new Set(workers.map(w => w.role))].filter(Boolean);
@@ -1013,6 +1305,15 @@ function App() {
               </div>
 
               <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={handleExportExcel}
+                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-md hover:shadow-lg active:scale-95 whitespace-nowrap"
+                  title="Excel 파일로 내보내기"
+                >
+                  <Download className="w-4 h-4" />
+                  <span className="hidden sm:inline">Excel</span>
+                </button>
                 <button 
                   type="button"
                   onClick={handlePrint}
@@ -1051,7 +1352,8 @@ function App() {
         
         {/* Modern Dashboard Stats (Show in Setup and Daily tabs) */}
         {(activeTab === 'setup' || activeTab === 'daily') && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10 no-print animate-in slide-in-from-bottom-4 duration-500">
+          <div className="space-y-6 mb-10 no-print animate-in slide-in-from-bottom-4 duration-500">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
             <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group">
                <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50 rounded-full -mr-10 -mt-10 group-hover:scale-150 transition-transform duration-500"></div>
                <div className="relative z-10">
@@ -1100,6 +1402,92 @@ function App() {
                 <p className="text-2xl font-extrabold text-slate-900 mt-2 tracking-tight">{totalPhotos} <span className="text-sm text-slate-400 font-medium">장</span></p>
                </div>
             </div>
+            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group">
+               <div className="absolute top-0 right-0 w-24 h-24 bg-violet-50 rounded-full -mr-10 -mt-10 group-hover:scale-150 transition-transform duration-500"></div>
+               <div className="relative z-10 space-y-3">
+                <div className="flex items-center gap-3 mb-2">
+                    <div className="bg-violet-100 p-2 rounded-lg text-violet-600">
+                        <BarChart3 className="w-5 h-5" />
+                    </div>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">누계 집행 현황</p>
+                </div>
+                <input
+                  type="number"
+                  value={annualBudget}
+                  onChange={(e) => setAnnualBudget(Number(e.target.value) || 0)}
+                  onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-right font-mono focus:border-violet-500 outline-none bg-white"
+                  placeholder="연간 계상액 입력"
+                />
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">사진 업로드 품질</label>
+                  <select
+                    value={uploadQualityPreset}
+                    onChange={(e) => setUploadQualityPreset(e.target.value as 'low' | 'balanced' | 'high')}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:border-violet-500 outline-none bg-white"
+                  >
+                    <option value="low">저용량 (빠름/작은 파일)</option>
+                    <option value="balanced">표준 (권장)</option>
+                    <option value="high">고품질 (선명/큰 파일)</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs font-bold text-slate-500">
+                    <span>집행률</span>
+                    <span>{executionRate.toFixed(1)}%</span>
+                  </div>
+                  <div className="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div className="h-full bg-violet-500 transition-all duration-300" style={{ width: `${Math.min(executionRate, 100)}%` }} />
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-500 pt-1">
+                    <span>예산 {annualBudget.toLocaleString()} 원</span>
+                    <span>잔액 {remainingBudget.toLocaleString()} 원</span>
+                  </div>
+                </div>
+               </div>
+            </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">월별 누계 추이</h3>
+                  <p className="text-xs text-slate-500 mt-1">최근 6개월 기준 집행액 변동을 확인합니다.</p>
+                </div>
+                <div className="text-xs font-medium text-slate-400">기준월: {currentMonthKey}</div>
+              </div>
+
+              {sortedMonthlySnapshots.length === 0 ? (
+                <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 py-10 text-center text-sm text-slate-400">
+                  아직 저장된 월별 추이 데이터가 없습니다.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {sortedMonthlySnapshots.map(([monthKey, snapshot]) => {
+                    const barWidth = `${Math.max((snapshot.totalCost / maxMonthlyTotal) * 100, snapshot.totalCost > 0 ? 6 : 0)}%`;
+                    return (
+                      <div key={monthKey} className="grid grid-cols-1 lg:grid-cols-[110px_1fr_160px] gap-3 items-center">
+                        <div className="text-sm font-bold text-slate-700">{monthKey}</div>
+                        <div>
+                          <div className="h-3 rounded-full bg-slate-100 overflow-hidden">
+                            <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-violet-500 to-emerald-500" style={{ width: barWidth }} />
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
+                            <span>유도원 {snapshot.laborCost.toLocaleString()}원</span>
+                            <span>안전시설 {snapshot.safetyWorkerCost.toLocaleString()}원</span>
+                            <span>재료비 {snapshot.materialCost.toLocaleString()}원</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-extrabold text-slate-900">{snapshot.totalCost.toLocaleString()} 원</div>
+                          <div className="text-[11px] text-slate-400 mt-1">사진 {snapshot.photoCount}장</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1144,6 +1532,7 @@ function App() {
               setPhotos={setLaborPhotos}
               title="유도원 및 감시자 인건비 증빙 사진"
               categoryOptions={laborWorkerRoles.length > 0 ? laborWorkerRoles : WORKER_ROLES}
+              uploadQualityPreset={uploadQualityPreset}
             />
 
             {/* Photo Transfer Divider */}
@@ -1221,6 +1610,7 @@ function App() {
               setPhotos={setSafetyPhotos}
               title="안전시설 인건비 증빙 사진"
               categoryOptions={safetyWorkerRoles.length > 0 ? safetyWorkerRoles : WORKER_ROLES}
+              uploadQualityPreset={uploadQualityPreset}
             />
             
             <div className="bg-gradient-to-r from-indigo-50 to-white p-6 rounded-2xl border border-indigo-100 text-sm text-indigo-900 flex items-start gap-4 shadow-sm">
@@ -1263,6 +1653,7 @@ function App() {
             safetyWorkers={safetyWorkers}
             safetyAttendance={safetyAttendance}
             setSafetyAttendance={setSafetyAttendance}
+            uploadQualityPreset={uploadQualityPreset}
           />
         )}
 
@@ -1634,6 +2025,33 @@ function App() {
           </div>
         )}
       </main>
+
+      <RestoreOptionsModal
+        isOpen={restoreModalState !== null}
+        fileName={restoreModalState?.fileName || ''}
+        summary={restoreModalState?.summary || {
+          siteName: '',
+          workerCount: 0,
+          laborAttendanceDays: 0,
+          laborPhotoCount: 0,
+          safetyWorkerCount: 0,
+          safetyAttendanceDays: 0,
+          safetyPhotoCount: 0,
+          safetyItemCount: 0,
+        }}
+        selections={restoreModalState?.selections || {
+          mode: 'overwrite',
+          restoreLabor: false,
+          restoreLaborAttendance: false,
+          restoreLaborPhotos: false,
+          restoreSafety: false,
+          restoreSafetyAttendance: false,
+          restoreSafetyPhotos: false,
+        }}
+        onChange={(next) => setRestoreModalState(prev => prev ? { ...prev, selections: next } : prev)}
+        onClose={() => setRestoreModalState(null)}
+        onConfirm={applyRestoreSelections}
+      />
     </div>
   );
 }

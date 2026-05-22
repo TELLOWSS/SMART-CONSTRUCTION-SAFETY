@@ -26,6 +26,7 @@ export interface Worker {
   role: string;
   daysWorked: number;
   dailyRate: number;
+  dailyRateHistory?: Record<string, number>; // YYYY-MM -> dailyRate
   bankAccountOwner: boolean;
   notes: string;
   // New fields for detailed report
