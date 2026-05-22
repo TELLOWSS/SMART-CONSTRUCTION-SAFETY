@@ -5,7 +5,7 @@ import { LaborCostTable } from './components/LaborCostTable';
 import { SafetyCostTable } from './components/SafetyCostTable';
 import { PhotoLedger } from './components/PhotoLedger';
 import { DailyLogManager } from './components/DailyLogManager';
-import { ProjectInfo, Worker, PhotoEvidence, DailyAttendance, SafetyItem } from './types';
+import { ProjectInfo, Worker, PhotoEvidence, DailyAttendance, SafetyItem, WORKER_ROLES } from './types';
 import { Printer, Layout, FileText, ShieldCheck, CalendarCheck, HelpCircle, BarChart3, ChevronRight, Clock, Download, Upload, RotateCcw, ShoppingCart, Loader2, Save, FilePlus, ArrowLeftRight, Trash2 } from 'lucide-react';
 import { 
   validatePhotoData, 
@@ -1143,7 +1143,7 @@ function App() {
               photos={laborPhotos}
               setPhotos={setLaborPhotos}
               title="유도원 및 감시자 인건비 증빙 사진"
-              categoryOptions={laborWorkerRoles}
+              categoryOptions={laborWorkerRoles.length > 0 ? laborWorkerRoles : WORKER_ROLES}
             />
 
             {/* Photo Transfer Divider */}
@@ -1220,7 +1220,7 @@ function App() {
               photos={safetyPhotos}
               setPhotos={setSafetyPhotos}
               title="안전시설 인건비 증빙 사진"
-              categoryOptions={safetyWorkerRoles}
+              categoryOptions={safetyWorkerRoles.length > 0 ? safetyWorkerRoles : WORKER_ROLES}
             />
             
             <div className="bg-gradient-to-r from-indigo-50 to-white p-6 rounded-2xl border border-indigo-100 text-sm text-indigo-900 flex items-start gap-4 shadow-sm">

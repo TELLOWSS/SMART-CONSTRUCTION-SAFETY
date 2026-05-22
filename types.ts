@@ -68,7 +68,7 @@ export const WORKER_ROLES = [
 ];
 
 export const PHOTO_CATEGORIES = [
-  "안전난간 설치 및 보수",
+  "안전시설 설치 및 보수",
   "추락방지망 설치 상태",
   "개구부 덮개 조치",
   "비상대피로 확보",
