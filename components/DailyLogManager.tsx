@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Worker, PhotoEvidence, DailyAttendance, PHOTO_CATEGORIES, CompressionResult } from '../types';
+import { Worker, PhotoEvidence, DailyAttendance, PHOTO_CATEGORIES, WORKER_ROLES, CompressionResult } from '../types';
 import { Calendar, ChevronLeft, ChevronRight, CheckCircle2, Circle, Camera, Plus, MapPin, ImagePlus, Edit3, User, Clock, Loader2, EyeOff, Eye } from 'lucide-react';
 import { estimateMemoryUsage, optimizeImage, processInChunks } from '../utils/photoOptimization';
 
@@ -18,9 +18,11 @@ interface Props {
   safetyAttendance?: DailyAttendance;
   setSafetyAttendance?: React.Dispatch<React.SetStateAction<DailyAttendance>>;
   uploadQualityPreset?: 'low' | 'balanced' | 'high';
+  laborCategoryOptions?: string[];
+  safetyCategoryOptions?: string[];
 }
 
-export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAttendance, photos, setPhotos, safetyPhotos = [], setSafetyPhotos, year, month, safetyWorkers = [], safetyAttendance = {}, setSafetyAttendance, uploadQualityPreset = 'balanced' }) => {
+export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAttendance, photos, setPhotos, safetyPhotos = [], setSafetyPhotos, year, month, safetyWorkers = [], safetyAttendance = {}, setSafetyAttendance, uploadQualityPreset = 'balanced', laborCategoryOptions, safetyCategoryOptions }) => {
   // Use local date string instead of UTC to fix timezone issues
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const now = new Date();
@@ -153,6 +155,8 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
 
   const todaysPhotos = photos.filter(p => p.date === selectedDate);
   const todaysSafetyPhotos = safetyPhotos.filter(p => p.date === selectedDate);
+  const resolvedLaborCategories = (laborCategoryOptions && laborCategoryOptions.length > 0 ? laborCategoryOptions : WORKER_ROLES);
+  const resolvedSafetyCategories = (safetyCategoryOptions && safetyCategoryOptions.length > 0 ? safetyCategoryOptions : PHOTO_CATEGORIES);
   
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'labor' | 'safety' = 'labor') => {
     if (e.target.files && e.target.files.length > 0) {
@@ -207,10 +211,15 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
             continue;
           }
           if (result.base64) optimizedBase64List.push(result.base64);
+
+          const defaultCategory = target === 'safety'
+            ? (resolvedSafetyCategories[0] || PHOTO_CATEGORIES[0])
+            : (resolvedLaborCategories[0] || WORKER_ROLES[0] || PHOTO_CATEGORIES[0]);
+
           newPhotos.push({
             id: crypto.randomUUID(),
             fileUrl: URL.createObjectURL(result.blob),
-            category: PHOTO_CATEGORIES[0],
+            category: defaultCategory,
             description: '',
             location: '',
             date: selectedDate,

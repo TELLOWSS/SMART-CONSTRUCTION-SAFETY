@@ -1654,6 +1654,8 @@ function App() {
             safetyAttendance={safetyAttendance}
             setSafetyAttendance={setSafetyAttendance}
             uploadQualityPreset={uploadQualityPreset}
+            laborCategoryOptions={laborWorkerRoles.length > 0 ? laborWorkerRoles : WORKER_ROLES}
+            safetyCategoryOptions={safetyWorkerRoles.length > 0 ? safetyWorkerRoles : WORKER_ROLES}
           />
         )}
 

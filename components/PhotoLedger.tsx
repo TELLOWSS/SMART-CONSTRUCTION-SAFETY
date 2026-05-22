@@ -17,6 +17,34 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
   const [isProcessing, setIsProcessing] = useState(false);
   const [sectionCollapsed, setSectionCollapsed] = useState(false);
   const [inferredOrientations, setInferredOrientations] = useState<Record<string, 'portrait' | 'landscape' | 'square'>>({});
+  const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
+  const [bulkCategory, setBulkCategory] = useState<string>('');
+  const [bulkDescription, setBulkDescription] = useState<string>('');
+  const [bulkDate, setBulkDate] = useState<string>('');
+
+  const availableCategories = (categoryOptions && categoryOptions.length > 0) ? categoryOptions : PHOTO_CATEGORIES;
+
+  useEffect(() => {
+    setSelectedPhotoIds(prev => prev.filter(id => photos.some(photo => photo.id === id)));
+  }, [photos]);
+
+  useEffect(() => {
+    if (!bulkCategory) {
+      setBulkCategory(availableCategories[0] || '');
+      return;
+    }
+
+    if (!availableCategories.includes(bulkCategory)) {
+      setBulkCategory(availableCategories[0] || '');
+    }
+  }, [availableCategories, bulkCategory]);
+
+  useEffect(() => {
+    if (!bulkDate) {
+      const today = new Date(Date.now() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+      setBulkDate(today);
+    }
+  }, [bulkDate]);
 
   const getImageOrientation = (blob: Blob): Promise<'portrait' | 'landscape' | 'square'> => {
     return new Promise((resolve, reject) => {
@@ -141,6 +169,60 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
 
   const updatePhoto = (id: string, field: keyof PhotoEvidence, value: string) => {
     setPhotos(photos.map(p => p.id === id ? { ...p, [field]: value } : p));
+  };
+
+  const togglePhotoSelection = (id: string) => {
+    setSelectedPhotoIds(prev => prev.includes(id) ? prev.filter(photoId => photoId !== id) : [...prev, id]);
+  };
+
+  const selectAllPhotos = () => {
+    setSelectedPhotoIds(photos.map(photo => photo.id));
+  };
+
+  const clearPhotoSelection = () => {
+    setSelectedPhotoIds([]);
+  };
+
+  const applyBulkCategoryChange = () => {
+    if (selectedPhotoIds.length === 0) {
+      alert('일괄 수정할 사진을 먼저 선택하세요.');
+      return;
+    }
+
+    if (!bulkCategory) {
+      alert('변경할 공종을 선택하세요.');
+      return;
+    }
+
+    setPhotos(prev => prev.map(photo => selectedPhotoIds.includes(photo.id) ? { ...photo, category: bulkCategory } : photo));
+    setSelectedPhotoIds([]);
+  };
+
+  const applyBulkMetaChange = () => {
+    if (selectedPhotoIds.length === 0) {
+      alert('일괄 수정할 사진을 먼저 선택하세요.');
+      return;
+    }
+
+    const hasCategory = bulkCategory.trim().length > 0;
+    const hasDescription = bulkDescription.trim().length > 0;
+    const hasDate = bulkDate.trim().length > 0;
+
+    if (!hasCategory && !hasDescription && !hasDate) {
+      alert('변경할 항목을 하나 이상 입력하세요.');
+      return;
+    }
+
+    setPhotos(prev => prev.map(photo => {
+      if (!selectedPhotoIds.includes(photo.id)) return photo;
+      return {
+        ...photo,
+        ...(hasCategory ? { category: bulkCategory } : {}),
+        ...(hasDescription ? { description: bulkDescription } : {}),
+        ...(hasDate ? { date: bulkDate } : {}),
+      };
+    }));
+    setSelectedPhotoIds([]);
   };
 
   const removePhoto = (id: string) => {
@@ -273,6 +355,83 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
         </label>
       </div>
 
+      {!sectionCollapsed && photos.length > 0 && (
+        <div className="px-8 pb-4 flex flex-col gap-3 border-b border-slate-100">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={selectAllPhotos}
+              className="px-3 py-2 text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg border border-slate-200 transition-colors"
+            >
+              전체 선택
+            </button>
+            <button
+              type="button"
+              onClick={clearPhotoSelection}
+              className="px-3 py-2 text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg border border-slate-200 transition-colors"
+            >
+              선택 해제
+            </button>
+            <div className="ml-auto text-xs text-slate-500 font-medium">
+              선택됨: <span className="font-bold text-slate-800">{selectedPhotoIds.length}</span> / {photos.length}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 mb-1.5 uppercase tracking-wide">일괄 변경 공종</label>
+              <div className="relative">
+                <select
+                  value={bulkCategory}
+                  onChange={(e) => setBulkCategory(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all cursor-pointer font-medium text-slate-700 appearance-none"
+                >
+                  {availableCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+                <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                  <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 mb-1.5 uppercase tracking-wide">일괄 작업내용</label>
+              <input
+                type="text"
+                value={bulkDescription}
+                onChange={(e) => setBulkDescription(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all placeholder-slate-400"
+                placeholder="선택 항목에 동일 내용 적용"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 mb-1.5 uppercase tracking-wide">일괄 촬영일자</label>
+              <input
+                type="date"
+                value={bulkDate}
+                onChange={(e) => setBulkDate(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all text-slate-700"
+              />
+            </div>
+
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+            <button
+              type="button"
+              onClick={applyBulkMetaChange}
+              className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={selectedPhotoIds.length === 0}
+            >
+              선택 항목에 적용
+            </button>
+          </div>
+        </div>
+      )}
+
       {!sectionCollapsed && (
       <div className="px-8 pb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {photos.map((photo) => (
@@ -280,6 +439,15 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
             <div className="aspect-video w-full bg-slate-100 relative border-b border-slate-100">
               <img src={photo.fileUrl} alt="preview" className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+              <label className="absolute top-2 left-2 bg-white/90 backdrop-blur-sm rounded-full p-1.5 shadow-md border border-slate-200 opacity-0 group-hover:opacity-100 transition-all cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedPhotoIds.includes(photo.id)}
+                  onChange={() => togglePhotoSelection(photo.id)}
+                  className="h-4 w-4 accent-indigo-600 cursor-pointer"
+                  aria-label="사진 선택"
+                />
+              </label>
               <button
                 onClick={() => removePhoto(photo.id)}
                 className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-red-600 transform hover:scale-110 active:scale-90"
@@ -298,7 +466,7 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
                     onChange={(e) => updatePhoto(photo.id, 'category', e.target.value)}
                     className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all cursor-pointer font-medium text-slate-700 appearance-none"
                     >
-                    {(categoryOptions && categoryOptions.length > 0 ? categoryOptions : PHOTO_CATEGORIES).map(cat => (
+                    {availableCategories.map(cat => (
                         <option key={cat} value={cat}>{cat}</option>
                     ))}
                     </select>
