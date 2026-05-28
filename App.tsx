@@ -7,7 +7,7 @@ import { PhotoLedger } from './components/PhotoLedger';
 import { DailyLogManager } from './components/DailyLogManager';
 import { RestoreOptionsModal, RestoreSelections, RestoreSummary } from './components/RestoreOptionsModal';
 import { ProjectInfo, Worker, PhotoEvidence, DailyAttendance, SafetyItem, WORKER_ROLES } from './types';
-import { Printer, Layout, FileText, ShieldCheck, CalendarCheck, HelpCircle, BarChart3, ChevronRight, Clock, Download, Upload, RotateCcw, ShoppingCart, Loader2, Save, FilePlus, ArrowLeftRight, Trash2 } from 'lucide-react';
+import { Printer, Layout, FileText, ShieldCheck, CalendarCheck, HelpCircle, BarChart3, ChevronRight, Clock, Download, Upload, RotateCcw, ShoppingCart, Loader2, Save, FilePlus, ArrowLeftRight, Trash2, Lock, LockOpen } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { 
   validatePhotoData, 
@@ -69,7 +69,23 @@ interface MonthlySnapshot {
   totalCost: number;
   photoCount: number;
   updatedAt: number;
+  isClosed?: boolean;
+  closedAt?: number;
+  note?: string;
 }
+
+const getPrevMonthKey = (monthKey: string): string => {
+  const [yearStr, monthStr] = monthKey.split('-');
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  if (!year || !month) return monthKey;
+
+  if (month === 1) {
+    return `${year - 1}-12`;
+  }
+
+  return `${year}-${String(month - 1).padStart(2, '0')}`;
+};
 
 function App() {
   const [activeTab, setActiveTab] = useState<'setup' | 'daily' | 'preview' | 'guide'>('guide');
@@ -91,6 +107,14 @@ function App() {
   const [annualBudget, setAnnualBudget] = useState<number>(0); // 연간 계상액(예산)
   const [uploadQualityPreset, setUploadQualityPreset] = useState<'low' | 'balanced' | 'high'>('balanced');
   const [monthlySnapshots, setMonthlySnapshots] = useState<Record<string, MonthlySnapshot>>({});
+  const [aggregationMode, setAggregationMode] = useState<'single' | 'range'>('single');
+  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [rangeStartMonth, setRangeStartMonth] = useState<string>('');
+  const [rangeEndMonth, setRangeEndMonth] = useState<string>('');
+  const [graphMode, setGraphMode] = useState<'recent6' | 'year12' | 'range'>('recent6');
+  const [graphYear, setGraphYear] = useState<string>('');
+  const [graphRangeStartMonth, setGraphRangeStartMonth] = useState<string>('');
+  const [graphRangeEndMonth, setGraphRangeEndMonth] = useState<string>('');
   const [restoreModalState, setRestoreModalState] = useState<RestoreModalState | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1016,12 +1040,128 @@ function App() {
   const executionRate = annualBudget > 0 ? Math.min((totalCost / annualBudget) * 100, 999.9) : 0;
   const remainingBudget = Math.max(annualBudget - totalCost, 0);
   const currentMonthKey = getMonthKey(projectInfo.year, projectInfo.month);
-  const sortedMonthlySnapshots = Object.entries(monthlySnapshots)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .slice(-6);
-  const maxMonthlyTotal = Math.max(...sortedMonthlySnapshots.map(([, snapshot]) => snapshot.totalCost), 1);
+  const currentMonthSnapshot = monthlySnapshots[currentMonthKey];
+  const isCurrentMonthClosed = currentMonthSnapshot?.isClosed === true;
+  const currentMonthClosedAt = currentMonthSnapshot?.closedAt
+    ? new Date(currentMonthSnapshot.closedAt).toLocaleString('ko-KR')
+    : '';
+  const allSortedMonthlySnapshots = Object.entries(monthlySnapshots).sort(([a], [b]) => a.localeCompare(b));
+  const availableMonthKeys = allSortedMonthlySnapshots.map(([monthKey]) => monthKey);
+  const normalizedSelectedMonth = selectedMonth || currentMonthKey;
+
+  const normalizedRangeStart = rangeStartMonth || availableMonthKeys[0] || currentMonthKey;
+  const normalizedRangeEnd = rangeEndMonth || availableMonthKeys[availableMonthKeys.length - 1] || currentMonthKey;
+  const [rangeFrom, rangeTo] = normalizedRangeStart.localeCompare(normalizedRangeEnd) <= 0
+    ? [normalizedRangeStart, normalizedRangeEnd]
+    : [normalizedRangeEnd, normalizedRangeStart];
+
+  const selectedSnapshotEntries = aggregationMode === 'single'
+    ? allSortedMonthlySnapshots.filter(([monthKey]) => monthKey === normalizedSelectedMonth)
+    : allSortedMonthlySnapshots.filter(([monthKey]) => monthKey >= rangeFrom && monthKey <= rangeTo);
+
+  const selectedMonthsCount = selectedSnapshotEntries.length;
+  const selectedLaborCost = selectedSnapshotEntries.reduce((sum, [, snapshot]) => sum + snapshot.laborCost, 0);
+  const selectedSafetyWorkerCost = selectedSnapshotEntries.reduce((sum, [, snapshot]) => sum + snapshot.safetyWorkerCost, 0);
+  const selectedMaterialCost = selectedSnapshotEntries.reduce((sum, [, snapshot]) => sum + snapshot.materialCost, 0);
+  const selectedTotalCost = selectedSnapshotEntries.reduce((sum, [, snapshot]) => sum + snapshot.totalCost, 0);
+  const selectedAverageCost = selectedMonthsCount > 0 ? selectedTotalCost / selectedMonthsCount : 0;
+  const selectedPeriodLabel = aggregationMode === 'single'
+    ? normalizedSelectedMonth
+    : `${rangeFrom} ~ ${rangeTo}`;
+
+  const previousPeriodEntries = aggregationMode === 'single'
+    ? allSortedMonthlySnapshots.filter(([monthKey]) => monthKey === getPrevMonthKey(normalizedSelectedMonth))
+    : allSortedMonthlySnapshots
+        .filter(([monthKey]) => monthKey < rangeFrom)
+        .slice(-selectedMonthsCount);
+
+  const previousPeriodTotal = previousPeriodEntries.reduce((sum, [, snapshot]) => sum + snapshot.totalCost, 0);
+  const deltaFromPrevious = selectedTotalCost - previousPeriodTotal;
+  const deltaRateFromPrevious = previousPeriodTotal > 0
+    ? (deltaFromPrevious / previousPeriodTotal) * 100
+    : (selectedTotalCost > 0 ? 100 : 0);
+  const selectedExecutionRate = annualBudget > 0 ? (selectedTotalCost / annualBudget) * 100 : 0;
+
+  const availableYears = Array.from(new Set(availableMonthKeys.map(monthKey => monthKey.slice(0, 4))))
+    .filter(Boolean)
+    .sort();
+  const normalizedGraphYear = graphYear || String(projectInfo.year);
+  const normalizedGraphRangeStart = graphRangeStartMonth || availableMonthKeys[0] || currentMonthKey;
+  const normalizedGraphRangeEnd = graphRangeEndMonth || availableMonthKeys[availableMonthKeys.length - 1] || currentMonthKey;
+  const [graphRangeFrom, graphRangeTo] = normalizedGraphRangeStart.localeCompare(normalizedGraphRangeEnd) <= 0
+    ? [normalizedGraphRangeStart, normalizedGraphRangeEnd]
+    : [normalizedGraphRangeEnd, normalizedGraphRangeStart];
+
+  const graphSnapshots = graphMode === 'recent6'
+    ? allSortedMonthlySnapshots.slice(-6)
+    : graphMode === 'year12'
+      ? allSortedMonthlySnapshots.filter(([monthKey]) => monthKey.startsWith(`${normalizedGraphYear}-`)).slice(-12)
+      : allSortedMonthlySnapshots.filter(([monthKey]) => monthKey >= graphRangeFrom && monthKey <= graphRangeTo);
+
+  const graphTitleDescription = graphMode === 'recent6'
+    ? '최근 6개월 기준 집행액 변동을 확인합니다.'
+    : graphMode === 'year12'
+      ? `${normalizedGraphYear}년 월별 집행액 추이를 확인합니다.`
+      : `${graphRangeFrom} ~ ${graphRangeTo} 기간 집행액 추이를 확인합니다.`;
+
+  const maxGraphTotal = Math.max(...graphSnapshots.map(([, snapshot]) => snapshot.totalCost), 1);
 
   useEffect(() => {
+    if (selectedMonth) return;
+    setSelectedMonth(currentMonthKey);
+  }, [selectedMonth, currentMonthKey]);
+
+  useEffect(() => {
+    if (!rangeStartMonth) {
+      setRangeStartMonth(availableMonthKeys[0] || currentMonthKey);
+    }
+    if (!rangeEndMonth) {
+      setRangeEndMonth(availableMonthKeys[availableMonthKeys.length - 1] || currentMonthKey);
+    }
+  }, [rangeStartMonth, rangeEndMonth, availableMonthKeys, currentMonthKey]);
+
+  useEffect(() => {
+    if (graphYear) return;
+    setGraphYear(String(projectInfo.year));
+  }, [graphYear, projectInfo.year]);
+
+  useEffect(() => {
+    if (!graphRangeStartMonth) {
+      setGraphRangeStartMonth(availableMonthKeys[0] || currentMonthKey);
+    }
+    if (!graphRangeEndMonth) {
+      setGraphRangeEndMonth(availableMonthKeys[availableMonthKeys.length - 1] || currentMonthKey);
+    }
+  }, [graphRangeStartMonth, graphRangeEndMonth, availableMonthKeys, currentMonthKey]);
+
+  useEffect(() => {
+    setMonthlySnapshots(prev => {
+      const existing = prev[currentMonthKey];
+      if (existing?.isClosed) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        [currentMonthKey]: {
+          laborCost: totalLaborCost,
+          safetyWorkerCost: totalSafetyWorkersCost,
+          materialCost: totalMaterialCost,
+          totalCost,
+          photoCount: totalPhotos,
+          updatedAt: Date.now(),
+          isClosed: false,
+          closedAt: undefined,
+          note: existing?.note,
+        }
+      };
+    });
+  }, [currentMonthKey, totalLaborCost, totalSafetyWorkersCost, totalMaterialCost, totalCost, totalPhotos]);
+
+  const handleCloseCurrentMonth = () => {
+    const noteInput = prompt('월 마감 메모를 입력하세요. (선택)');
+    if (noteInput === null) return;
+
     setMonthlySnapshots(prev => ({
       ...prev,
       [currentMonthKey]: {
@@ -1031,9 +1171,36 @@ function App() {
         totalCost,
         photoCount: totalPhotos,
         updatedAt: Date.now(),
+        isClosed: true,
+        closedAt: Date.now(),
+        note: noteInput.trim() || undefined,
       }
     }));
-  }, [currentMonthKey, totalLaborCost, totalSafetyWorkersCost, totalMaterialCost, totalCost, totalPhotos]);
+
+    alert(`${currentMonthKey} 월이 마감되었습니다.\n마감 해제 전까지 자동 집계 갱신이 중지됩니다.`);
+  };
+
+  const handleReopenCurrentMonth = () => {
+    if (!confirm(`${currentMonthKey} 월 마감을 해제하시겠습니까?\n해제 후에는 데이터 변경 시 월간 집계가 다시 자동 갱신됩니다.`)) {
+      return;
+    }
+
+    setMonthlySnapshots(prev => {
+      const existing = prev[currentMonthKey];
+      if (!existing) return prev;
+
+      return {
+        ...prev,
+        [currentMonthKey]: {
+          ...existing,
+          isClosed: false,
+          closedAt: undefined,
+        }
+      };
+    });
+
+    alert(`${currentMonthKey} 월 마감이 해제되었습니다.`);
+  };
 
   const handleExportExcel = () => {
     const workbook = XLSX.utils.book_new();
@@ -1129,19 +1296,36 @@ function App() {
       ]
     );
 
-    const monthlyTrendSheet = XLSX.utils.json_to_sheet(
-      Object.entries(monthlySnapshots)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([monthKey, snapshot]) => ({
-          월: monthKey,
-          유도원인건비: snapshot.laborCost,
-          안전시설인건비: snapshot.safetyWorkerCost,
-          재료비: snapshot.materialCost,
-          총집행액: snapshot.totalCost,
-          사진수: snapshot.photoCount,
-          최종갱신: new Date(snapshot.updatedAt).toLocaleString('ko-KR'),
-        }))
-    );
+    const sortedMonthlyEntries = Object.entries(monthlySnapshots)
+      .sort(([a], [b]) => a.localeCompare(b));
+
+    let cumulativeTotal = 0;
+    const monthlyTrendRows = sortedMonthlyEntries.map(([monthKey, snapshot], index) => {
+      cumulativeTotal += snapshot.totalCost;
+      const previousTotal = index > 0 ? sortedMonthlyEntries[index - 1][1].totalCost : 0;
+      const deltaAmount = snapshot.totalCost - previousTotal;
+      const deltaRate = previousTotal > 0
+        ? (deltaAmount / previousTotal) * 100
+        : (snapshot.totalCost > 0 ? 100 : 0);
+      const cumulativeExecutionRate = annualBudget > 0 ? (cumulativeTotal / annualBudget) * 100 : 0;
+
+      return {
+        월: monthKey,
+        유도원인건비: snapshot.laborCost,
+        안전시설인건비: snapshot.safetyWorkerCost,
+        재료비: snapshot.materialCost,
+        총집행액: snapshot.totalCost,
+        전월대비증감액: deltaAmount,
+        전월대비증감률: `${deltaRate.toFixed(1)}%`,
+        누적집행액: cumulativeTotal,
+        누적집행률: `${cumulativeExecutionRate.toFixed(1)}%`,
+        사진수: snapshot.photoCount,
+        월마감: snapshot.isClosed ? '확정' : '진행중',
+        최종갱신: new Date(snapshot.updatedAt).toLocaleString('ko-KR'),
+      };
+    });
+
+    const monthlyTrendSheet = XLSX.utils.json_to_sheet(monthlyTrendRows);
 
     summarySheet['!cols'] = [
       { wch: 18 }, { wch: 10 }, { wch: 8 }, { wch: 18 }, { wch: 12 }, { wch: 12 },
@@ -1157,13 +1341,14 @@ function App() {
       { wch: 18 }, { wch: 16 }, { wch: 8 }, { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 20 }
     ];
     monthlyTrendSheet['!cols'] = [
-      { wch: 10 }, { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 20 }
+      { wch: 10 }, { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 14 },
+      { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 20 }
     ];
     summarySheet['!autofilter'] = { ref: 'A1:M2' };
     laborSheet['!autofilter'] = { ref: `A1:H${workers.length + 2}` };
     safetyWorkerSheet['!autofilter'] = { ref: `A1:H${safetyWorkers.length + 2}` };
     itemSheet['!autofilter'] = { ref: `A1:G${safetyItems.length + 2}` };
-    monthlyTrendSheet['!autofilter'] = { ref: `A1:G${Object.keys(monthlySnapshots).length + 1}` };
+    monthlyTrendSheet['!autofilter'] = { ref: `A1:L${Object.keys(monthlySnapshots).length + 1}` };
 
     XLSX.utils.book_append_sheet(workbook, summarySheet, '요약');
     XLSX.utils.book_append_sheet(workbook, laborSheet, '유도원인건비');
@@ -1452,25 +1637,124 @@ function App() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
                 <div>
                   <h3 className="text-base font-bold text-slate-800">월별 누계 추이</h3>
-                  <p className="text-xs text-slate-500 mt-1">최근 6개월 기준 집행액 변동을 확인합니다.</p>
+                  <p className="text-xs text-slate-500 mt-1">{graphTitleDescription}</p>
                 </div>
-                <div className="text-xs font-medium text-slate-400">기준월: {currentMonthKey}</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="text-xs font-medium text-slate-400">기준월: {currentMonthKey}</div>
+                  {isCurrentMonthClosed ? (
+                    <button
+                      type="button"
+                      onClick={handleReopenCurrentMonth}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 transition-colors"
+                    >
+                      <LockOpen className="w-3.5 h-3.5" />
+                      월 마감 해제
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleCloseCurrentMonth}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-[11px] font-bold text-violet-700 hover:bg-violet-100 transition-colors"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      월 마감 확정
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {sortedMonthlySnapshots.length === 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">그래프 기준</label>
+                  <select
+                    value={graphMode}
+                    onChange={(e) => setGraphMode(e.target.value as 'recent6' | 'year12' | 'range')}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:border-violet-500 outline-none bg-white"
+                  >
+                    <option value="recent6">최근 6개월</option>
+                    <option value="year12">연간 12개월</option>
+                    <option value="range">기간 지정</option>
+                  </select>
+                </div>
+
+                {graphMode === 'year12' ? (
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1">조회 연도</label>
+                    <select
+                      value={normalizedGraphYear}
+                      onChange={(e) => setGraphYear(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:border-violet-500 outline-none bg-white"
+                    >
+                      {(availableYears.length > 0 ? availableYears : [String(projectInfo.year)]).map(year => (
+                        <option key={year} value={year}>{year}년</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : graphMode === 'range' ? (
+                  <>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 mb-1">시작 월</label>
+                      <select
+                        value={graphRangeStartMonth || normalizedGraphRangeStart}
+                        onChange={(e) => setGraphRangeStartMonth(e.target.value)}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:border-violet-500 outline-none bg-white"
+                      >
+                        {(availableMonthKeys.length > 0 ? availableMonthKeys : [currentMonthKey]).map(monthKey => (
+                          <option key={monthKey} value={monthKey}>{monthKey}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 mb-1">종료 월</label>
+                      <select
+                        value={graphRangeEndMonth || normalizedGraphRangeEnd}
+                        onChange={(e) => setGraphRangeEndMonth(e.target.value)}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:border-violet-500 outline-none bg-white"
+                      >
+                        {(availableMonthKeys.length > 0 ? availableMonthKeys : [currentMonthKey]).map(monthKey => (
+                          <option key={monthKey} value={monthKey}>{monthKey}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                ) : (
+                  <div className="md:col-span-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-[11px] text-slate-500 font-medium">
+                    최근 6개월은 자동으로 최신 월 기준으로 표시됩니다.
+                  </div>
+                )}
+              </div>
+
+              {isCurrentMonthClosed && (
+                <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-medium text-emerald-700">
+                  현재 월은 마감 상태입니다{currentMonthClosedAt ? ` · 마감시각 ${currentMonthClosedAt}` : ''}
+                  {currentMonthSnapshot?.note ? ` · 메모: ${currentMonthSnapshot.note}` : ''}
+                </div>
+              )}
+
+              {graphSnapshots.length === 0 ? (
                 <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 py-10 text-center text-sm text-slate-400">
                   아직 저장된 월별 추이 데이터가 없습니다.
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {sortedMonthlySnapshots.map(([monthKey, snapshot]) => {
-                    const barWidth = `${Math.max((snapshot.totalCost / maxMonthlyTotal) * 100, snapshot.totalCost > 0 ? 6 : 0)}%`;
+                  {graphSnapshots.map(([monthKey, snapshot]) => {
+                    const barWidth = `${Math.max((snapshot.totalCost / maxGraphTotal) * 100, snapshot.totalCost > 0 ? 6 : 0)}%`;
+                    const laborRatio = snapshot.totalCost > 0 ? (snapshot.laborCost / snapshot.totalCost) * 100 : 0;
+                    const safetyWorkerRatio = snapshot.totalCost > 0 ? (snapshot.safetyWorkerCost / snapshot.totalCost) * 100 : 0;
+                    const materialRatio = snapshot.totalCost > 0 ? (snapshot.materialCost / snapshot.totalCost) * 100 : 0;
                     return (
                       <div key={monthKey} className="grid grid-cols-1 lg:grid-cols-[110px_1fr_160px] gap-3 items-center">
-                        <div className="text-sm font-bold text-slate-700">{monthKey}</div>
+                        <div className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
+                          <span>{monthKey}</span>
+                          {snapshot.isClosed && <Lock className="w-3.5 h-3.5 text-emerald-600" />}
+                        </div>
                         <div>
                           <div className="h-3 rounded-full bg-slate-100 overflow-hidden">
-                            <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-violet-500 to-emerald-500" style={{ width: barWidth }} />
+                            <div className="h-full rounded-full overflow-hidden flex" style={{ width: barWidth }}>
+                              <div className="h-full bg-indigo-500" style={{ width: `${laborRatio}%` }} />
+                              <div className="h-full bg-violet-500" style={{ width: `${safetyWorkerRatio}%` }} />
+                              <div className="h-full bg-emerald-500" style={{ width: `${materialRatio}%` }} />
+                            </div>
                           </div>
                           <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
                             <span>유도원 {snapshot.laborCost.toLocaleString()}원</span>
@@ -1485,6 +1769,118 @@ function App() {
                       </div>
                     );
                   })}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+              <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-5">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">월간 금액 집계 조회</h3>
+                  <p className="text-xs text-slate-500 mt-1">원하는 단월 또는 기간 기준으로 집계 금액을 확인합니다.</p>
+                </div>
+                <div className="text-xs font-medium text-slate-400">조회 기준: {selectedPeriodLabel}</div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">조회 방식</label>
+                  <select
+                    value={aggregationMode}
+                    onChange={(e) => setAggregationMode(e.target.value as 'single' | 'range')}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:border-violet-500 outline-none bg-white"
+                  >
+                    <option value="single">단월</option>
+                    <option value="range">기간</option>
+                  </select>
+                </div>
+
+                {aggregationMode === 'single' ? (
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-1">조회 월</label>
+                    <select
+                      value={normalizedSelectedMonth}
+                      onChange={(e) => setSelectedMonth(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:border-violet-500 outline-none bg-white"
+                    >
+                      {availableMonthKeys.length === 0 ? (
+                        <option value={currentMonthKey}>{currentMonthKey}</option>
+                      ) : (
+                        availableMonthKeys.map(monthKey => (
+                          <option key={monthKey} value={monthKey}>{monthKey}</option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 mb-1">시작 월</label>
+                      <select
+                        value={rangeStartMonth || normalizedRangeStart}
+                        onChange={(e) => setRangeStartMonth(e.target.value)}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:border-violet-500 outline-none bg-white"
+                      >
+                        {availableMonthKeys.length === 0 ? (
+                          <option value={currentMonthKey}>{currentMonthKey}</option>
+                        ) : (
+                          availableMonthKeys.map(monthKey => (
+                            <option key={monthKey} value={monthKey}>{monthKey}</option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 mb-1">종료 월</label>
+                      <select
+                        value={rangeEndMonth || normalizedRangeEnd}
+                        onChange={(e) => setRangeEndMonth(e.target.value)}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:border-violet-500 outline-none bg-white"
+                      >
+                        {availableMonthKeys.length === 0 ? (
+                          <option value={currentMonthKey}>{currentMonthKey}</option>
+                        ) : (
+                          availableMonthKeys.map(monthKey => (
+                            <option key={monthKey} value={monthKey}>{monthKey}</option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {selectedMonthsCount === 0 ? (
+                <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 py-8 text-center text-sm text-slate-400">
+                  선택한 조건에 해당하는 월간 집계 데이터가 없습니다.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="text-[11px] font-bold text-slate-500">총집행액</div>
+                    <div className="text-lg font-extrabold text-slate-900 mt-1">{selectedTotalCost.toLocaleString()} 원</div>
+                    <div className="text-[11px] text-slate-500 mt-1">대상월 {selectedMonthsCount}개월</div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="text-[11px] font-bold text-slate-500">항목별 합계</div>
+                    <div className="text-[11px] text-slate-600 mt-1">유도원 {selectedLaborCost.toLocaleString()} 원</div>
+                    <div className="text-[11px] text-slate-600">안전시설 {selectedSafetyWorkerCost.toLocaleString()} 원</div>
+                    <div className="text-[11px] text-slate-600">재료비 {selectedMaterialCost.toLocaleString()} 원</div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="text-[11px] font-bold text-slate-500">평균/집행률</div>
+                    <div className="text-[11px] text-slate-600 mt-1">월평균 {selectedAverageCost.toLocaleString()} 원</div>
+                    <div className="text-[11px] text-slate-600">예산대비 {selectedExecutionRate.toFixed(1)}%</div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="text-[11px] font-bold text-slate-500">전기 대비</div>
+                    <div className={`text-lg font-extrabold mt-1 ${deltaFromPrevious >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      {deltaFromPrevious >= 0 ? '+' : ''}{deltaFromPrevious.toLocaleString()} 원
+                    </div>
+                    <div className={`text-[11px] mt-1 ${deltaFromPrevious >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {deltaRateFromPrevious >= 0 ? '+' : ''}{deltaRateFromPrevious.toFixed(1)}%
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
