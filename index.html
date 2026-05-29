@@ -41,6 +41,13 @@
         .print\:break-after-page { break-after: page !important; }
         .print\:mt-0 { margin-top: 0 !important; }
         .print\:max-w-none { max-width: none !important; }
+        .print-safe-page { min-height: auto !important; height: auto !important; overflow: visible !important; }
+        .print-safe-body { height: auto !important; display: block !important; }
+        .print-safe-inner { height: auto !important; }
+        .animate-in, .fade-in, .zoom-in-95, .slide-in-from-top-2, .slide-in-from-bottom-4 {
+          animation: none !important;
+          transition: none !important;
+        }
       }
     </style>
   <script type="importmap">

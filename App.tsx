@@ -2305,10 +2305,10 @@ function App() {
             </div>
 
             {printRowsWithRunningTotal.length > 0 && (
-              <div className="bg-white shadow-2xl max-w-[21cm] w-full mx-auto print:shadow-none print:max-w-none animate-in zoom-in-95 duration-300 origin-top rounded-sm print:break-after-page">
-                <div className="p-[10mm] md:p-[15mm] h-full flex flex-col">
-                  <div className="border-2 border-slate-900 p-1 flex-1">
-                    <div className="border border-slate-600 h-full p-8">
+              <div className="print-safe-page bg-white shadow-2xl max-w-[21cm] w-full mx-auto print:shadow-none print:max-w-none animate-in zoom-in-95 duration-300 origin-top rounded-sm print:break-after-page">
+                <div className="print-safe-body p-[10mm] md:p-[15mm] h-full flex flex-col">
+                  <div className="print-safe-inner border-2 border-slate-900 p-1 flex-1">
+                    <div className="print-safe-inner border border-slate-600 h-full p-8">
                       <div className="border-b-2 border-slate-900 pb-3 mb-6 text-center break-inside-avoid">
                         <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 기간 월별 사용금액 첨부 】</p>
                         <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {printPeriodLabel}</p>
@@ -2370,10 +2370,10 @@ function App() {
             )}
 
             {printScopeMode === 'range' && printRowsWithRunningTotal.map(row => (
-              <div key={`monthly-front-${row.monthKey}`} className="bg-white shadow-2xl min-h-[29.7cm] max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm print:break-after-page">
-                <div className="p-[10mm] md:p-[15mm] h-full flex flex-col">
-                  <div className="border-2 border-slate-900 p-1 flex-1">
-                    <div className="border border-slate-600 h-full p-8 relative">
+              <div key={`monthly-front-${row.monthKey}`} className="print-safe-page bg-white shadow-2xl min-h-[29.7cm] max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm print:break-after-page">
+                <div className="print-safe-body p-[10mm] md:p-[15mm] h-full flex flex-col">
+                  <div className="print-safe-inner border-2 border-slate-900 p-1 flex-1">
+                    <div className="print-safe-inner border border-slate-600 h-full p-8 relative">
                       <div className="border-b-2 border-slate-900 pb-3 mb-8 text-center break-inside-avoid">
                         <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 월별 갑지 】</p>
                         <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {row.monthKey}</p>
@@ -2456,10 +2456,10 @@ function App() {
 
             {/* ===== 갑지 1: 유도원 및 감시자 인건비 (Front Sheet – Page 1) ===== */}
             {showLaborCost && (
-            <div className="bg-white shadow-2xl min-h-[29.7cm] max-w-[21cm] w-full mx-auto print:shadow-none print:max-w-none animate-in zoom-in-95 duration-300 origin-top rounded-sm print:break-after-page">
-             <div className="p-[10mm] md:p-[15mm] h-full flex flex-col">
-                <div className="border-2 border-slate-900 p-1 flex-1">
-                  <div className="border border-slate-600 h-full p-8 relative">
+            <div className="print-safe-page bg-white shadow-2xl min-h-[29.7cm] max-w-[21cm] w-full mx-auto print:shadow-none print:max-w-none animate-in zoom-in-95 duration-300 origin-top rounded-sm print:break-after-page">
+             <div className="print-safe-body p-[10mm] md:p-[15mm] h-full flex flex-col">
+                <div className="print-safe-inner border-2 border-slate-900 p-1 flex-1">
+                  <div className="print-safe-inner border border-slate-600 h-full p-8 relative">
                     
                     <ProjectHeader info={printProjectInfo} onChange={setProjectInfo} readOnly />
                     
@@ -2550,7 +2550,7 @@ function App() {
 
             {/* ===== 첨부 1: 유도원 및 감시자 인건비 제출 증빙 양식 (Attachment 1) ===== */}
             {showLaborCost && (
-            <div className="bg-white shadow-2xl max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm print:break-after-page">
+            <div className="print-safe-page bg-white shadow-2xl max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm print:break-after-page">
               <div className="p-[10mm] md:p-[15mm]">
                 <div className="border-2 border-slate-900 p-1">
                   <div className="border border-slate-600 p-8">
@@ -2633,10 +2633,10 @@ function App() {
 
             {/* ===== 갑지 2: 안전시설 인건비 (Front Sheet – Page 2) ===== */}
             {showSafetyCost && (
-              <div className="bg-white shadow-2xl min-h-[29.7cm] max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm print:break-after-page">
-               <div className="p-[10mm] md:p-[15mm] h-full flex flex-col">
-                  <div className="border-2 border-slate-900 p-1 flex-1">
-                    <div className="border border-slate-600 h-full p-8 relative">
+              <div className="print-safe-page bg-white shadow-2xl min-h-[29.7cm] max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm print:break-after-page">
+               <div className="print-safe-body p-[10mm] md:p-[15mm] h-full flex flex-col">
+                  <div className="print-safe-inner border-2 border-slate-900 p-1 flex-1">
+                    <div className="print-safe-inner border border-slate-600 h-full p-8 relative">
                       
                       <ProjectHeader info={printProjectInfo} onChange={setProjectInfo} readOnly />
                       
@@ -2735,7 +2735,7 @@ function App() {
 
             {/* ===== 첨부 1 (갑지 2 소속): 안전시설 인건비 집행 상세 내역 (Attachment) ===== */}
             {showSafetyCost && (
-              <div className="bg-white shadow-2xl max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm print:break-after-page">
+              <div className="print-safe-page bg-white shadow-2xl max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm print:break-after-page">
                 <div className="p-[10mm] md:p-[15mm]">
                   <div className="border-2 border-slate-900 p-1">
                     <div className="border border-slate-600 p-8">
