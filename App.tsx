@@ -2367,21 +2367,27 @@ function App() {
                           <div className="col-span-4 border-r border-slate-300 p-2">금 액 (원)</div>
                           <div className="col-span-2 p-2">비 고</div>
                         </div>
+                        {showLaborCost && (
                         <div className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
                           <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">1</div>
                           <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">유도원 및 감시자 인건비</div>
                           <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{row.monthlyLaborCost.toLocaleString()}</div>
                           <div className="col-span-2 p-2 text-xs text-slate-500">월 사용액</div>
                         </div>
+                        )}
+                        {showSafetyCost && (
                         <div className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
-                          <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">2</div>
+                          <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">{showLaborCost ? 2 : 1}</div>
                           <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">안전시설 인건비/재료비</div>
                           <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{(row.monthlySafetyWorkerCost + row.monthlyMaterialCost).toLocaleString()}</div>
                           <div className="col-span-2 p-2 text-xs text-slate-500">월 사용액</div>
                         </div>
+                        )}
                         <div className="grid grid-cols-12 bg-slate-100 font-bold border-t border-slate-400 text-center items-center">
                           <div className="col-span-6 border-r border-slate-300 p-2">월 합계</div>
-                          <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 text-indigo-900">{row.monthlyTotalCost.toLocaleString()}</div>
+                          <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 text-indigo-900">
+                            {((showLaborCost ? row.monthlyLaborCost : 0) + (showSafetyCost ? row.monthlySafetyWorkerCost + row.monthlyMaterialCost : 0)).toLocaleString()}
+                          </div>
                           <div className="col-span-2 p-2"></div>
                         </div>
                       </div>
@@ -2398,6 +2404,26 @@ function App() {
                           </div>
                         )}
                       </div>
+
+                      {/* 월별 근로자 세부 내역 */}
+                      {showLaborCost && workers.length > 0 && (() => {
+                        const { year: rowYear, month: rowMonth } = getYearMonthFromKey(row.monthKey);
+                        return (
+                          <div className="mt-6 border-t border-slate-300 pt-4">
+                            <h4 className="text-base font-bold mb-2 text-slate-700">
+                              유도원 및 감시자 세부 내역 ({row.monthKey})
+                            </h4>
+                            <LaborCostTable
+                              workers={workers}
+                              setWorkers={setWorkers}
+                              attendance={attendance}
+                              year={rowYear}
+                              month={rowMonth}
+                              readOnly
+                            />
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
