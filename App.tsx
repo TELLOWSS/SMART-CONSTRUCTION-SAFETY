@@ -1104,7 +1104,23 @@ function App() {
       ? `${normalizedGraphYear}년 월별 집행액 추이를 확인합니다.`
       : `${graphRangeFrom} ~ ${graphRangeTo} 기간 집행액 추이를 확인합니다.`;
 
-  const maxGraphTotal = Math.max(...graphSnapshots.map(([, snapshot]) => snapshot.totalCost), 1);
+  const currentMonthGraphSnapshot: MonthlySnapshot = isCurrentMonthClosed && currentMonthSnapshot
+    ? currentMonthSnapshot
+    : {
+        laborCost: totalLaborCost,
+        safetyWorkerCost: totalSafetyWorkersCost,
+        materialCost: totalMaterialCost,
+        totalCost,
+        photoCount: totalPhotos,
+        updatedAt: Date.now(),
+        isClosed: false,
+      };
+  const hasCurrentMonthInGraph = graphSnapshots.some(([monthKey]) => monthKey === currentMonthKey);
+  const graphSnapshotsForDisplay: Array<[string, MonthlySnapshot]> = hasCurrentMonthInGraph
+    ? graphSnapshots
+    : [...graphSnapshots, [currentMonthKey, currentMonthGraphSnapshot] as [string, MonthlySnapshot]]
+        .sort(([a], [b]) => a.localeCompare(b));
+  const maxGraphDisplayTotal = Math.max(...graphSnapshotsForDisplay.map(([, snapshot]) => snapshot.totalCost), 1);
 
   useEffect(() => {
     if (selectedMonth) return;
@@ -1731,22 +1747,28 @@ function App() {
                 </div>
               )}
 
-              {graphSnapshots.length === 0 ? (
+              {graphSnapshotsForDisplay.length === 0 ? (
                 <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 py-10 text-center text-sm text-slate-400">
                   아직 저장된 월별 추이 데이터가 없습니다.
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {graphSnapshots.map(([monthKey, snapshot]) => {
-                    const barWidth = `${Math.max((snapshot.totalCost / maxGraphTotal) * 100, snapshot.totalCost > 0 ? 6 : 0)}%`;
-                    const laborRatio = snapshot.totalCost > 0 ? (snapshot.laborCost / snapshot.totalCost) * 100 : 0;
-                    const safetyWorkerRatio = snapshot.totalCost > 0 ? (snapshot.safetyWorkerCost / snapshot.totalCost) * 100 : 0;
-                    const materialRatio = snapshot.totalCost > 0 ? (snapshot.materialCost / snapshot.totalCost) * 100 : 0;
+                  {graphSnapshotsForDisplay.map(([monthKey, snapshot]) => {
+                    const isCurrentRow = monthKey === currentMonthKey;
+                    const displaySnapshot = isCurrentRow ? currentMonthGraphSnapshot : snapshot;
+                    const barWidth = `${Math.max((displaySnapshot.totalCost / maxGraphDisplayTotal) * 100, displaySnapshot.totalCost > 0 ? 6 : 0)}%`;
+                    const laborRatio = displaySnapshot.totalCost > 0 ? (displaySnapshot.laborCost / displaySnapshot.totalCost) * 100 : 0;
+                    const safetyWorkerRatio = displaySnapshot.totalCost > 0 ? (displaySnapshot.safetyWorkerCost / displaySnapshot.totalCost) * 100 : 0;
+                    const materialRatio = displaySnapshot.totalCost > 0 ? (displaySnapshot.materialCost / displaySnapshot.totalCost) * 100 : 0;
                     return (
-                      <div key={monthKey} className="grid grid-cols-1 lg:grid-cols-[110px_1fr_160px] gap-3 items-center">
+                      <div
+                        key={monthKey}
+                        className={`grid grid-cols-1 lg:grid-cols-[110px_1fr_160px] gap-3 items-center rounded-2xl px-3 py-2 ${isCurrentRow ? 'bg-indigo-50 border border-indigo-200' : ''}`}
+                      >
                         <div className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
                           <span>{monthKey}</span>
-                          {snapshot.isClosed && <Lock className="w-3.5 h-3.5 text-emerald-600" />}
+                          {isCurrentRow && <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-1.5 py-0.5 rounded">당월</span>}
+                          {displaySnapshot.isClosed && <Lock className="w-3.5 h-3.5 text-emerald-600" />}
                         </div>
                         <div>
                           <div className="h-3 rounded-full bg-slate-100 overflow-hidden">
@@ -1757,14 +1779,15 @@ function App() {
                             </div>
                           </div>
                           <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
-                            <span>유도원 {snapshot.laborCost.toLocaleString()}원</span>
-                            <span>안전시설 {snapshot.safetyWorkerCost.toLocaleString()}원</span>
-                            <span>재료비 {snapshot.materialCost.toLocaleString()}원</span>
+                            <span>유도원 {displaySnapshot.laborCost.toLocaleString()}원</span>
+                            <span>안전시설 {displaySnapshot.safetyWorkerCost.toLocaleString()}원</span>
+                            <span>재료비 {displaySnapshot.materialCost.toLocaleString()}원</span>
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-sm font-extrabold text-slate-900">{snapshot.totalCost.toLocaleString()} 원</div>
-                          <div className="text-[11px] text-slate-400 mt-1">사진 {snapshot.photoCount}장</div>
+                          <div className="text-sm font-extrabold text-slate-900">{displaySnapshot.totalCost.toLocaleString()} 원</div>
+                          <div className="text-[11px] text-slate-400 mt-1">사진 {displaySnapshot.photoCount}장</div>
+                          {isCurrentRow && <div className="text-[11px] text-indigo-600 font-bold mt-1">당월 금액</div>}
                         </div>
                       </div>
                     );
