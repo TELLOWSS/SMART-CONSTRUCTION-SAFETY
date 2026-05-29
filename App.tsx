@@ -2566,6 +2566,65 @@ function App() {
                       month={printReferenceMonth}
                       readOnly
                     />
+
+                    {/* 기간 출력 시: 기간 누계 인건비 산출 정보 */}
+                    {printScopeMode === 'range' && (() => {
+                      const periodMonthKeys = printSelectedRows.map(r => r.monthKey);
+                      const workerPeriodData = workers.map(worker => {
+                        let totalDays = 0;
+                        let totalPay = 0;
+                        periodMonthKeys.forEach(monthKey => {
+                          const [yr, mo] = monthKey.split('-').map(Number);
+                          const daysInMo = new Date(yr, mo, 0).getDate();
+                          const rate = (worker as any).dailyRateHistory?.[monthKey] ?? worker.dailyRate;
+                          for (let d = 1; d <= daysInMo; d++) {
+                            const dateStr = `${monthKey}-${String(d).padStart(2, '0')}`;
+                            const v = attendance[dateStr]?.[worker.id] || 0;
+                            totalDays += v;
+                            totalPay += v * rate;
+                          }
+                        });
+                        return { worker, totalDays, totalPay };
+                      }).filter(d => d.totalDays > 0);
+
+                      if (workerPeriodData.length === 0) return null;
+                      const grandTotal = workerPeriodData.reduce((s, d) => s + d.totalPay, 0);
+
+                      return (
+                        <div className="mt-8 border-t-2 border-slate-400 pt-6 break-inside-avoid">
+                          <h3 className="text-base font-bold mb-3 flex items-center gap-2 text-slate-800">
+                            <span className="w-1.5 h-5 bg-indigo-700 inline-block rounded-sm"></span>
+                            기간 누계 인건비 산출 정보 ({printRangeFrom} ~ {printRangeTo})
+                          </h3>
+                          <div className="border border-slate-400 text-xs">
+                            <div className="grid grid-cols-12 bg-slate-100 border-b border-slate-400 font-bold text-center">
+                              <div className="col-span-1 border-r border-slate-300 p-2">번호</div>
+                              <div className="col-span-3 border-r border-slate-300 p-2">성명</div>
+                              <div className="col-span-2 border-r border-slate-300 p-2">직종</div>
+                              <div className="col-span-2 border-r border-slate-300 p-2">기간 공수</div>
+                              <div className="col-span-2 border-r border-slate-300 p-2">평균 단가</div>
+                              <div className="col-span-2 p-2">기간 인건비</div>
+                            </div>
+                            {workerPeriodData.map(({ worker, totalDays, totalPay }, idx) => (
+                              <div key={worker.id} className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
+                                <div className="col-span-1 border-r border-slate-200 p-2 bg-slate-50 font-bold">{idx + 1}</div>
+                                <div className="col-span-3 border-r border-slate-200 p-2 font-bold text-left pl-3">{worker.name}</div>
+                                <div className="col-span-2 border-r border-slate-200 p-2">{worker.role}</div>
+                                <div className="col-span-2 border-r border-slate-200 p-2">{totalDays % 1 === 0 ? totalDays : totalDays.toFixed(1)} 일</div>
+                                <div className="col-span-2 border-r border-slate-200 p-2 text-right pr-3">
+                                  {totalDays > 0 ? Math.round(totalPay / totalDays).toLocaleString() : '-'}
+                                </div>
+                                <div className="col-span-2 p-2 text-right pr-3 font-bold text-indigo-800">{totalPay.toLocaleString()}</div>
+                              </div>
+                            ))}
+                            <div className="grid grid-cols-12 bg-slate-100 font-bold border-t border-slate-400 text-center items-center">
+                              <div className="col-span-10 border-r border-slate-300 p-2 text-center">기간 합계</div>
+                              <div className="col-span-2 p-2 text-right pr-3 text-indigo-900">{grandTotal.toLocaleString()}</div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
