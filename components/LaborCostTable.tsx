@@ -148,6 +148,10 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
     return attendance[dateStr]?.[workerId];
   };
 
+  const getMonthlyDaysWorked = (workerId: string): number => {
+    return daysArray.reduce((sum, day) => sum + (getDailyValue(workerId, day) || 0), 0);
+  };
+
   if (readOnly) {
     // Filter workers to show only those with attendance in the report month
     const workersWithAttendance = workers.filter(worker => {
@@ -161,6 +165,10 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
 
     const reportWorkers = includeAllWorkersInReport ? workers : workersWithAttendance;
     const hiddenWorkersCount = includeAllWorkersInReport ? 0 : (workers.length - workersWithAttendance.length);
+
+    const reportTotalCost = reportWorkers.reduce((sum, worker) => {
+      return sum + (getMonthlyDaysWorked(worker.id) * worker.dailyRate);
+    }, 0);
 
     return (
       <div className="mb-8 break-inside-avoid">
@@ -178,7 +186,8 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
         
         <div className="space-y-4">
           {reportWorkers.map((worker, index) => {
-             const totalPay = worker.daysWorked * worker.dailyRate;
+             const monthlyDaysWorked = getMonthlyDaysWorked(worker.id);
+             const totalPay = monthlyDaysWorked * worker.dailyRate;
              const netPay = totalPay; 
 
              return (
@@ -223,7 +232,7 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
                   <div className="col-span-2 border-r border-slate-300 p-1.5 text-center whitespace-nowrap overflow-hidden text-ellipsis">{worker.role}</div>
                   
                   <div className="col-span-1 border-r border-slate-300 p-1.5 text-center font-bold bg-slate-50">출력공수</div>
-                  <div className="col-span-1 border-r border-slate-300 p-1.5 text-center font-bold">{worker.daysWorked}</div>
+                  <div className="col-span-1 border-r border-slate-300 p-1.5 text-center font-bold">{monthlyDaysWorked}</div>
                   
                   <div className="col-span-1 border-r border-slate-300 p-1.5 text-center font-bold bg-slate-50">노무비단가</div>
                   <div className="col-span-2 border-r border-slate-300 p-1.5 text-right px-2">{worker.dailyRate.toLocaleString()}</div>
@@ -244,7 +253,7 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
           {/* Grand Total */}
           <div className="border border-slate-400 bg-slate-100 p-2 flex justify-between items-center font-bold text-sm">
             <span>총 인건비 지급 합계 (Total)</span>
-            <span className="text-indigo-800 text-lg">{totalCost.toLocaleString()} 원</span>
+            <span className="text-indigo-800 text-lg">{reportTotalCost.toLocaleString()} 원</span>
           </div>
         </div>
         

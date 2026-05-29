@@ -87,6 +87,14 @@ const getPrevMonthKey = (monthKey: string): string => {
   return `${year}-${String(month - 1).padStart(2, '0')}`;
 };
 
+const getYearMonthFromKey = (monthKey: string): { year: number; month: number } => {
+  const [yearStr, monthStr] = monthKey.split('-');
+  return {
+    year: Number(yearStr) || new Date().getFullYear(),
+    month: Number(monthStr) || (new Date().getMonth() + 1),
+  };
+};
+
 function App() {
   const [activeTab, setActiveTab] = useState<'setup' | 'daily' | 'preview' | 'guide'>('guide');
   const [projectInfo, setProjectInfo] = useState<ProjectInfo>(INITIAL_PROJECT_INFO);
@@ -115,6 +123,11 @@ function App() {
   const [graphYear, setGraphYear] = useState<string>('');
   const [graphRangeStartMonth, setGraphRangeStartMonth] = useState<string>('');
   const [graphRangeEndMonth, setGraphRangeEndMonth] = useState<string>('');
+  const [printScopeMode, setPrintScopeMode] = useState<'single' | 'range'>('single');
+  const [printSingleMonth, setPrintSingleMonth] = useState<string>('');
+  const [printRangeStartMonth, setPrintRangeStartMonth] = useState<string>('');
+  const [printRangeEndMonth, setPrintRangeEndMonth] = useState<string>('');
+  const [monthlyFrontCumulativeDisplay, setMonthlyFrontCumulativeDisplay] = useState<'both' | 'full' | 'current'>('both');
   const [restoreModalState, setRestoreModalState] = useState<RestoreModalState | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1120,7 +1133,76 @@ function App() {
     ? graphSnapshots
     : [...graphSnapshots, [currentMonthKey, currentMonthGraphSnapshot] as [string, MonthlySnapshot]]
         .sort(([a], [b]) => a.localeCompare(b));
-  const maxGraphDisplayTotal = Math.max(...graphSnapshotsForDisplay.map(([, snapshot]) => snapshot.totalCost), 1);
+
+  const snapshotByMonth = new Map<string, MonthlySnapshot>(allSortedMonthlySnapshots);
+  snapshotByMonth.set(currentMonthKey, currentMonthGraphSnapshot);
+
+  const graphMonthlyRows = graphSnapshotsForDisplay.map(([monthKey, snapshot]) => {
+    const prevMonthSnapshot = snapshotByMonth.get(getPrevMonthKey(monthKey));
+    const monthlyLaborCost = snapshot.laborCost - (prevMonthSnapshot?.laborCost || 0);
+    const monthlySafetyWorkerCost = snapshot.safetyWorkerCost - (prevMonthSnapshot?.safetyWorkerCost || 0);
+    const monthlyMaterialCost = snapshot.materialCost - (prevMonthSnapshot?.materialCost || 0);
+    const monthlyTotalCost = snapshot.totalCost - (prevMonthSnapshot?.totalCost || 0);
+
+    return {
+      monthKey,
+      snapshot,
+      monthlyLaborCost,
+      monthlySafetyWorkerCost,
+      monthlyMaterialCost,
+      monthlyTotalCost,
+    };
+  });
+
+  const maxGraphDisplayTotal = Math.max(...graphMonthlyRows.map(row => Math.max(row.monthlyTotalCost, 0)), 1);
+
+  const allMonthKeysForPrint = Array.from(snapshotByMonth.keys()).sort((a, b) => a.localeCompare(b));
+  const monthlyDeltaRowsAll = allMonthKeysForPrint.map(monthKey => {
+    const snapshot = snapshotByMonth.get(monthKey)!;
+    const prevMonthSnapshot = snapshotByMonth.get(getPrevMonthKey(monthKey));
+    return {
+      monthKey,
+      snapshot,
+      monthlyLaborCost: snapshot.laborCost - (prevMonthSnapshot?.laborCost || 0),
+      monthlySafetyWorkerCost: snapshot.safetyWorkerCost - (prevMonthSnapshot?.safetyWorkerCost || 0),
+      monthlyMaterialCost: snapshot.materialCost - (prevMonthSnapshot?.materialCost || 0),
+      monthlyTotalCost: snapshot.totalCost - (prevMonthSnapshot?.totalCost || 0),
+    };
+  });
+
+  const normalizedPrintSingleMonth = printSingleMonth || currentMonthKey;
+  const normalizedPrintRangeStart = printRangeStartMonth || allMonthKeysForPrint[0] || currentMonthKey;
+  const normalizedPrintRangeEnd = printRangeEndMonth || allMonthKeysForPrint[allMonthKeysForPrint.length - 1] || currentMonthKey;
+  const [printRangeFrom, printRangeTo] = normalizedPrintRangeStart.localeCompare(normalizedPrintRangeEnd) <= 0
+    ? [normalizedPrintRangeStart, normalizedPrintRangeEnd]
+    : [normalizedPrintRangeEnd, normalizedPrintRangeStart];
+
+  const printSelectedRows = printScopeMode === 'single'
+    ? monthlyDeltaRowsAll.filter(row => row.monthKey === normalizedPrintSingleMonth)
+    : monthlyDeltaRowsAll.filter(row => row.monthKey >= printRangeFrom && row.monthKey <= printRangeTo);
+
+  const printPeriodLabel = printScopeMode === 'single'
+    ? normalizedPrintSingleMonth
+    : `${printRangeFrom} ~ ${printRangeTo}`;
+
+  const printRowsWithRunningTotal = printSelectedRows.reduce<Array<typeof printSelectedRows[number] & { runningTotal: number }>>((acc, row) => {
+    const previous = acc.length > 0 ? acc[acc.length - 1].runningTotal : 0;
+    acc.push({ ...row, runningTotal: previous + row.monthlyTotalCost });
+    return acc;
+  }, []);
+
+  const printPeriodLaborCost = printSelectedRows.reduce((sum, row) => sum + row.monthlyLaborCost, 0);
+  const printPeriodSafetyWorkerCost = printSelectedRows.reduce((sum, row) => sum + row.monthlySafetyWorkerCost, 0);
+  const printPeriodMaterialCost = printSelectedRows.reduce((sum, row) => sum + row.monthlyMaterialCost, 0);
+  const printPeriodTotalCost = printSelectedRows.reduce((sum, row) => sum + row.monthlyTotalCost, 0);
+
+  const printReferenceMonthKey = (printSelectedRows[printSelectedRows.length - 1]?.monthKey) || currentMonthKey;
+  const { year: printReferenceYear, month: printReferenceMonth } = getYearMonthFromKey(printReferenceMonthKey);
+  const printProjectInfo: ProjectInfo = {
+    ...projectInfo,
+    year: printReferenceYear,
+    month: printReferenceMonth,
+  };
 
   useEffect(() => {
     if (selectedMonth) return;
@@ -1149,6 +1231,20 @@ function App() {
       setGraphRangeEndMonth(availableMonthKeys[availableMonthKeys.length - 1] || currentMonthKey);
     }
   }, [graphRangeStartMonth, graphRangeEndMonth, availableMonthKeys, currentMonthKey]);
+
+  useEffect(() => {
+    if (printSingleMonth) return;
+    setPrintSingleMonth(currentMonthKey);
+  }, [printSingleMonth, currentMonthKey]);
+
+  useEffect(() => {
+    if (!printRangeStartMonth) {
+      setPrintRangeStartMonth(allMonthKeysForPrint[0] || currentMonthKey);
+    }
+    if (!printRangeEndMonth) {
+      setPrintRangeEndMonth(allMonthKeysForPrint[allMonthKeysForPrint.length - 1] || currentMonthKey);
+    }
+  }, [printRangeStartMonth, printRangeEndMonth, allMonthKeysForPrint, currentMonthKey]);
 
   useEffect(() => {
     setMonthlySnapshots(prev => {
@@ -1652,8 +1748,8 @@ function App() {
             <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
                 <div>
-                  <h3 className="text-base font-bold text-slate-800">월별 누계 추이</h3>
-                  <p className="text-xs text-slate-500 mt-1">{graphTitleDescription}</p>
+                  <h3 className="text-base font-bold text-slate-800">월별 집행 추이</h3>
+                  <p className="text-xs text-slate-500 mt-1">{graphTitleDescription} (월 증분 기준)</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="text-xs font-medium text-slate-400">기준월: {currentMonthKey}</div>
@@ -1753,13 +1849,14 @@ function App() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {graphSnapshotsForDisplay.map(([monthKey, snapshot]) => {
+                  {graphMonthlyRows.map(({ monthKey, snapshot, monthlyLaborCost, monthlySafetyWorkerCost, monthlyMaterialCost, monthlyTotalCost }) => {
                     const isCurrentRow = monthKey === currentMonthKey;
                     const displaySnapshot = isCurrentRow ? currentMonthGraphSnapshot : snapshot;
-                    const barWidth = `${Math.max((displaySnapshot.totalCost / maxGraphDisplayTotal) * 100, displaySnapshot.totalCost > 0 ? 6 : 0)}%`;
-                    const laborRatio = displaySnapshot.totalCost > 0 ? (displaySnapshot.laborCost / displaySnapshot.totalCost) * 100 : 0;
-                    const safetyWorkerRatio = displaySnapshot.totalCost > 0 ? (displaySnapshot.safetyWorkerCost / displaySnapshot.totalCost) * 100 : 0;
-                    const materialRatio = displaySnapshot.totalCost > 0 ? (displaySnapshot.materialCost / displaySnapshot.totalCost) * 100 : 0;
+                    const barBaseAmount = Math.max(monthlyTotalCost, 0);
+                    const barWidth = `${Math.max((barBaseAmount / maxGraphDisplayTotal) * 100, barBaseAmount > 0 ? 6 : 0)}%`;
+                    const laborRatio = monthlyTotalCost > 0 ? (monthlyLaborCost / monthlyTotalCost) * 100 : 0;
+                    const safetyWorkerRatio = monthlyTotalCost > 0 ? (monthlySafetyWorkerCost / monthlyTotalCost) * 100 : 0;
+                    const materialRatio = monthlyTotalCost > 0 ? (monthlyMaterialCost / monthlyTotalCost) * 100 : 0;
                     return (
                       <div
                         key={monthKey}
@@ -1779,15 +1876,15 @@ function App() {
                             </div>
                           </div>
                           <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-500">
-                            <span>유도원 {displaySnapshot.laborCost.toLocaleString()}원</span>
-                            <span>안전시설 {displaySnapshot.safetyWorkerCost.toLocaleString()}원</span>
-                            <span>재료비 {displaySnapshot.materialCost.toLocaleString()}원</span>
+                            <span>유도원 {monthlyLaborCost.toLocaleString()}원</span>
+                            <span>안전시설 {monthlySafetyWorkerCost.toLocaleString()}원</span>
+                            <span>재료비 {monthlyMaterialCost.toLocaleString()}원</span>
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-sm font-extrabold text-slate-900">{displaySnapshot.totalCost.toLocaleString()} 원</div>
+                          <div className="text-sm font-extrabold text-slate-900">{monthlyTotalCost.toLocaleString()} 원</div>
                           <div className="text-[11px] text-slate-400 mt-1">사진 {displaySnapshot.photoCount}장</div>
-                          {isCurrentRow && <div className="text-[11px] text-indigo-600 font-bold mt-1">당월 금액</div>}
+                          {isCurrentRow && <div className="text-[11px] text-indigo-600 font-bold mt-1">당월 금액 (월 증분)</div>}
                         </div>
                       </div>
                     );
@@ -2146,7 +2243,166 @@ function App() {
                     <span>안전시설 재료비 내역(품목) 포함</span>
                 </label>
               </div>
+              <div className="w-full grid grid-cols-1 sm:grid-cols-4 gap-1.5 sm:gap-2">
+                <select
+                  value={printScopeMode}
+                  onChange={(e) => setPrintScopeMode(e.target.value as 'single' | 'range')}
+                  className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white"
+                >
+                  <option value="single">출력 기준: 단월</option>
+                  <option value="range">출력 기준: 기간</option>
+                </select>
+
+                {printScopeMode === 'single' ? (
+                  <select
+                    value={normalizedPrintSingleMonth}
+                    onChange={(e) => setPrintSingleMonth(e.target.value)}
+                    className="sm:col-span-3 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white"
+                  >
+                    {(allMonthKeysForPrint.length > 0 ? allMonthKeysForPrint : [currentMonthKey]).map(monthKey => (
+                      <option key={monthKey} value={monthKey}>{monthKey}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <>
+                    <select
+                      value={printRangeStartMonth || normalizedPrintRangeStart}
+                      onChange={(e) => setPrintRangeStartMonth(e.target.value)}
+                      className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white"
+                    >
+                      {(allMonthKeysForPrint.length > 0 ? allMonthKeysForPrint : [currentMonthKey]).map(monthKey => (
+                        <option key={monthKey} value={monthKey}>{monthKey}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={printRangeEndMonth || normalizedPrintRangeEnd}
+                      onChange={(e) => setPrintRangeEndMonth(e.target.value)}
+                      className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white"
+                    >
+                      {(allMonthKeysForPrint.length > 0 ? allMonthKeysForPrint : [currentMonthKey]).map(monthKey => (
+                        <option key={monthKey} value={monthKey}>{monthKey}</option>
+                      ))}
+                    </select>
+                    <div className="border border-indigo-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50">
+                      {printPeriodLabel}
+                    </div>
+                  </>
+                )}
+              </div>
+              {printScopeMode === 'range' && (
+                <div className="w-full flex justify-end">
+                  <select
+                    value={monthlyFrontCumulativeDisplay}
+                    onChange={(e) => setMonthlyFrontCumulativeDisplay(e.target.value as 'both' | 'full' | 'current')}
+                    className="border border-indigo-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50"
+                  >
+                    <option value="both">월별 갑지 누계 표기: 둘 다</option>
+                    <option value="full">월별 갑지 누계 표기: 기간 전체 누계</option>
+                    <option value="current">월별 갑지 누계 표기: 해당 월 누계</option>
+                  </select>
+                </div>
+              )}
             </div>
+
+            {printRowsWithRunningTotal.length > 0 && (
+              <div className="bg-white shadow-2xl max-w-[21cm] w-full mx-auto print:shadow-none print:max-w-none animate-in zoom-in-95 duration-300 origin-top rounded-sm print:break-after-page">
+                <div className="p-[10mm] md:p-[15mm] h-full flex flex-col">
+                  <div className="border-2 border-slate-900 p-1 flex-1">
+                    <div className="border border-slate-600 h-full p-8">
+                      <div className="border-b-2 border-slate-900 pb-3 mb-6 text-center break-inside-avoid">
+                        <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 기간 월별 사용금액 첨부 】</p>
+                        <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {printPeriodLabel}</p>
+                      </div>
+
+                      <div className="border border-slate-400 text-xs">
+                        <div className="grid grid-cols-12 bg-slate-100 border-b border-slate-400 font-bold text-center">
+                          <div className="col-span-2 border-r border-slate-300 p-2">월</div>
+                          <div className="col-span-2 border-r border-slate-300 p-2">유도원</div>
+                          <div className="col-span-2 border-r border-slate-300 p-2">안전시설</div>
+                          <div className="col-span-2 border-r border-slate-300 p-2">재료비</div>
+                          <div className="col-span-2 border-r border-slate-300 p-2">월 사용액</div>
+                          <div className="col-span-2 p-2">기간 누계</div>
+                        </div>
+                        {printRowsWithRunningTotal.map(row => (
+                          <div key={row.monthKey} className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
+                            <div className="col-span-2 border-r border-slate-200 p-2 font-bold bg-slate-50">{row.monthKey}</div>
+                            <div className="col-span-2 border-r border-slate-200 p-2 text-right pr-2">{row.monthlyLaborCost.toLocaleString()}</div>
+                            <div className="col-span-2 border-r border-slate-200 p-2 text-right pr-2">{row.monthlySafetyWorkerCost.toLocaleString()}</div>
+                            <div className="col-span-2 border-r border-slate-200 p-2 text-right pr-2">{row.monthlyMaterialCost.toLocaleString()}</div>
+                            <div className="col-span-2 border-r border-slate-200 p-2 text-right pr-2 font-bold">{row.monthlyTotalCost.toLocaleString()}</div>
+                            <div className="col-span-2 p-2 text-right pr-2 font-bold text-indigo-700">{row.runningTotal.toLocaleString()}</div>
+                          </div>
+                        ))}
+                        <div className="grid grid-cols-12 bg-slate-100 font-bold border-t border-slate-400 text-center items-center">
+                          <div className="col-span-8 border-r border-slate-300 p-2">기간 합계</div>
+                          <div className="col-span-2 border-r border-slate-300 p-2 text-right pr-2 text-indigo-900">{printPeriodTotalCost.toLocaleString()}</div>
+                          <div className="col-span-2 p-2 text-right pr-2 text-indigo-900">{printPeriodTotalCost.toLocaleString()}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {printScopeMode === 'range' && printRowsWithRunningTotal.map(row => (
+              <div key={`monthly-front-${row.monthKey}`} className="bg-white shadow-2xl min-h-[29.7cm] max-w-[21cm] w-full mx-auto mt-8 print:shadow-none print:max-w-none print:mt-0 rounded-sm print:break-after-page">
+                <div className="p-[10mm] md:p-[15mm] h-full flex flex-col">
+                  <div className="border-2 border-slate-900 p-1 flex-1">
+                    <div className="border border-slate-600 h-full p-8 relative">
+                      <div className="border-b-2 border-slate-900 pb-3 mb-8 text-center break-inside-avoid">
+                        <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 월별 갑지 】</p>
+                        <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {row.monthKey}</p>
+                      </div>
+
+                      <h3 className="text-lg font-bold mb-3 flex items-center gap-2 text-slate-800">
+                        <span className="w-1.5 h-6 bg-slate-800 inline-block rounded-sm"></span>
+                        월별 안전관리비 사용 내역 요약
+                      </h3>
+
+                      <div className="border border-slate-400 text-sm">
+                        <div className="grid grid-cols-12 bg-slate-100 border-b border-slate-400 font-bold text-center">
+                          <div className="col-span-1 border-r border-slate-300 p-2">번호</div>
+                          <div className="col-span-5 border-r border-slate-300 p-2">구 분</div>
+                          <div className="col-span-4 border-r border-slate-300 p-2">금 액 (원)</div>
+                          <div className="col-span-2 p-2">비 고</div>
+                        </div>
+                        <div className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
+                          <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">1</div>
+                          <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">유도원 및 감시자 인건비</div>
+                          <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{row.monthlyLaborCost.toLocaleString()}</div>
+                          <div className="col-span-2 p-2 text-xs text-slate-500">월 사용액</div>
+                        </div>
+                        <div className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
+                          <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">2</div>
+                          <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">안전시설 인건비/재료비</div>
+                          <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{(row.monthlySafetyWorkerCost + row.monthlyMaterialCost).toLocaleString()}</div>
+                          <div className="col-span-2 p-2 text-xs text-slate-500">월 사용액</div>
+                        </div>
+                        <div className="grid grid-cols-12 bg-slate-100 font-bold border-t border-slate-400 text-center items-center">
+                          <div className="col-span-6 border-r border-slate-300 p-2">월 합계</div>
+                          <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 text-indigo-900">{row.monthlyTotalCost.toLocaleString()}</div>
+                          <div className="col-span-2 p-2"></div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 text-right text-sm font-bold text-indigo-800 space-y-1">
+                        {(monthlyFrontCumulativeDisplay === 'both' || monthlyFrontCumulativeDisplay === 'full') && (
+                          <div>
+                            기간 전체 누계 ({printRangeFrom} ~ {printRangeTo}) : {printPeriodTotalCost.toLocaleString()} 원
+                          </div>
+                        )}
+                        {(monthlyFrontCumulativeDisplay === 'both' || monthlyFrontCumulativeDisplay === 'current') && (
+                          <div>
+                            해당 월 누계 ({printRangeFrom} ~ {row.monthKey}) : {row.runningTotal.toLocaleString()} 원
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
 
             {/* ===== 갑지 1: 유도원 및 감시자 인건비 (Front Sheet – Page 1) ===== */}
             {showLaborCost && (
@@ -2155,7 +2411,7 @@ function App() {
                 <div className="border-2 border-slate-900 p-1 flex-1">
                   <div className="border border-slate-600 h-full p-8 relative">
                     
-                    <ProjectHeader info={projectInfo} onChange={setProjectInfo} readOnly />
+                    <ProjectHeader info={printProjectInfo} onChange={setProjectInfo} readOnly />
                     
                     {/* 유도원 및 감시자 인건비 요약 (갑지 1) */}
                     <div className="mb-8 break-inside-avoid">
@@ -2173,12 +2429,12 @@ function App() {
                         <div className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
                           <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">1</div>
                           <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">유도원 및 감시자 인건비</div>
-                          <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{totalLaborCost.toLocaleString()}</div>
+                          <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{printPeriodLaborCost.toLocaleString()}</div>
                           <div className="col-span-2 p-2 text-xs text-slate-500">첨부 1 참조</div>
                         </div>
                         <div className="grid grid-cols-12 bg-slate-100 font-bold border-t border-slate-400 text-center items-center">
                           <div className="col-span-6 border-r border-slate-300 p-2">합 계</div>
-                          <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 text-indigo-900">{totalLaborCost.toLocaleString()}</div>
+                          <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 text-indigo-900">{printPeriodLaborCost.toLocaleString()}</div>
                           <div className="col-span-2 p-2"></div>
                         </div>
                       </div>
@@ -2250,14 +2506,14 @@ function App() {
                   <div className="border border-slate-600 p-8">
                     <div className="border-b-2 border-slate-900 pb-3 mb-6 text-center break-inside-avoid">
                       <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 첨 부 1 】</p>
-                      <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {projectInfo.year}년 {projectInfo.month}월</p>
+                      <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {printPeriodLabel}</p>
                     </div>
-                    <LaborCostTable
+                      <LaborCostTable
                       workers={workers}
                       setWorkers={setWorkers}
                       attendance={attendance}
-                      year={projectInfo.year}
-                      month={projectInfo.month}
+                      year={printReferenceYear}
+                      month={printReferenceMonth}
                       readOnly
                     />
                   </div>
@@ -2273,7 +2529,7 @@ function App() {
                   <div className="border-2 border-slate-900 p-1 flex-1">
                     <div className="border border-slate-600 h-full p-8 relative">
                       
-                      <ProjectHeader info={projectInfo} onChange={setProjectInfo} readOnly />
+                      <ProjectHeader info={printProjectInfo} onChange={setProjectInfo} readOnly />
                       
                       {/* 안전시설 인건비 요약 (갑지 2) */}
                       <div className="mb-8 break-inside-avoid">
@@ -2291,20 +2547,20 @@ function App() {
                           <div className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
                             <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">1</div>
                             <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">안전시설 인건비 (근로자)</div>
-                            <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{totalSafetyWorkersCost.toLocaleString()}</div>
+                            <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{printPeriodSafetyWorkerCost.toLocaleString()}</div>
                             <div className="col-span-2 p-2 text-xs text-slate-500">첨부 1 참조</div>
                           </div>
                           {showSafetyItems && (
                           <div className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
                             <div className="col-span-1 border-r border-slate-300 p-2 font-bold bg-slate-50">2</div>
                             <div className="col-span-5 border-r border-slate-300 p-2 text-left pl-3">안전시설 재료비</div>
-                            <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{totalMaterialCost.toLocaleString()}</div>
+                            <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 font-bold">{printPeriodMaterialCost.toLocaleString()}</div>
                             <div className="col-span-2 p-2 text-xs text-slate-500">첨부 1 참조</div>
                           </div>
                           )}
                           <div className="grid grid-cols-12 bg-slate-100 font-bold border-t border-slate-400 text-center items-center">
                             <div className="col-span-6 border-r border-slate-300 p-2">합 계</div>
-                            <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 text-indigo-900">{(showSafetyItems ? totalSafetyCost : totalSafetyWorkersCost).toLocaleString()}</div>
+                            <div className="col-span-4 border-r border-slate-300 p-2 text-right pr-3 text-indigo-900">{(showSafetyItems ? printPeriodTotalCost : printPeriodSafetyWorkerCost).toLocaleString()}</div>
                             <div className="col-span-2 p-2"></div>
                           </div>
                         </div>
@@ -2376,15 +2632,15 @@ function App() {
                     <div className="border border-slate-600 p-8">
                       <div className="border-b-2 border-slate-900 pb-3 mb-6 text-center break-inside-avoid">
                         <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 첨 부 1 】</p>
-                        <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {projectInfo.year}년 {projectInfo.month}월</p>
+                        <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {printPeriodLabel}</p>
                       </div>
                       {safetyWorkers.length > 0 && (
                         <LaborCostTable
                           workers={safetyWorkers}
                           setWorkers={setSafetyWorkers}
                           attendance={safetyAttendance}
-                          year={projectInfo.year}
-                          month={projectInfo.month}
+                          year={printReferenceYear}
+                          month={printReferenceMonth}
                           reportTitle="안전시설 인건비 근로자 증빙 양식"
                           includeAllWorkersInReport
                           readOnly
@@ -2411,7 +2667,7 @@ function App() {
                   <div className="border border-slate-600 p-8">
                     <div className="border-b-2 border-slate-900 pb-3 mb-6 text-center break-inside-avoid">
                       <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 첨 부 2 】</p>
-                      <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {projectInfo.year}년 {projectInfo.month}월</p>
+                      <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {printPeriodLabel}</p>
                     </div>
                     <PhotoLedger photos={laborPhotos} setPhotos={setLaborPhotos} readOnly title="2. 유도원 및 감시자 인건비 증빙 사진대지" />
                   </div>
@@ -2428,7 +2684,7 @@ function App() {
                     <div className="border border-slate-600 p-8">
                       <div className="border-b-2 border-slate-900 pb-3 mb-6 text-center break-inside-avoid">
                         <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mb-1">【 첨 부 2 】</p>
-                        <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {projectInfo.year}년 {projectInfo.month}월</p>
+                        <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {printPeriodLabel}</p>
                       </div>
                       <PhotoLedger photos={safetyPhotos} setPhotos={setSafetyPhotos} readOnly title="2. 안전시설 인건비 증빙 사진대지" />
                     </div>
