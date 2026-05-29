@@ -2314,31 +2314,55 @@ function App() {
                         <p className="text-sm text-slate-500">{projectInfo.siteName} &nbsp;|&nbsp; {printPeriodLabel}</p>
                       </div>
 
-                      <div className="border border-slate-400 text-xs">
-                        <div className="grid grid-cols-12 bg-slate-100 border-b border-slate-400 font-bold text-center">
-                          <div className="col-span-2 border-r border-slate-300 p-2">월</div>
-                          <div className="col-span-2 border-r border-slate-300 p-2">유도원</div>
-                          <div className="col-span-2 border-r border-slate-300 p-2">안전시설</div>
-                          <div className="col-span-2 border-r border-slate-300 p-2">재료비</div>
-                          <div className="col-span-2 border-r border-slate-300 p-2">월 사용액</div>
-                          <div className="col-span-2 p-2">기간 누계</div>
-                        </div>
-                        {printRowsWithRunningTotal.map(row => (
-                          <div key={row.monthKey} className="grid grid-cols-12 border-b border-slate-200 text-center items-center">
-                            <div className="col-span-2 border-r border-slate-200 p-2 font-bold bg-slate-50">{row.monthKey}</div>
-                            <div className="col-span-2 border-r border-slate-200 p-2 text-right pr-2">{row.monthlyLaborCost.toLocaleString()}</div>
-                            <div className="col-span-2 border-r border-slate-200 p-2 text-right pr-2">{row.monthlySafetyWorkerCost.toLocaleString()}</div>
-                            <div className="col-span-2 border-r border-slate-200 p-2 text-right pr-2">{row.monthlyMaterialCost.toLocaleString()}</div>
-                            <div className="col-span-2 border-r border-slate-200 p-2 text-right pr-2 font-bold">{row.monthlyTotalCost.toLocaleString()}</div>
-                            <div className="col-span-2 p-2 text-right pr-2 font-bold text-indigo-700">{row.runningTotal.toLocaleString()}</div>
+                      {(() => {
+                        const cols = [
+                          { key: 'month', label: '월', always: true },
+                          { key: 'labor', label: '유도원', always: false, show: showLaborCost },
+                          { key: 'safety', label: '안전시설', always: false, show: showSafetyCost },
+                          { key: 'material', label: '재료비', always: false, show: showSafetyItems && showSafetyCost },
+                          { key: 'monthTotal', label: '월 사용액', always: true },
+                          { key: 'running', label: '기간 누계', always: true },
+                        ].filter(c => c.always || c.show);
+                        const colStyle = { gridTemplateColumns: `repeat(${cols.length}, 1fr)` };
+                        const cell = 'border-r border-slate-300 p-2 last:border-r-0';
+                        const dataCell = 'border-r border-slate-200 p-2 last:border-r-0';
+                        const getRowTotal = (row: typeof printRowsWithRunningTotal[number]) =>
+                          (showLaborCost ? row.monthlyLaborCost : 0)
+                          + (showSafetyCost ? row.monthlySafetyWorkerCost : 0)
+                          + (showSafetyItems && showSafetyCost ? row.monthlyMaterialCost : 0);
+                        const periodTotal =
+                          (showLaborCost ? printPeriodLaborCost : 0)
+                          + (showSafetyCost ? printPeriodSafetyWorkerCost : 0)
+                          + (showSafetyItems && showSafetyCost ? printPeriodMaterialCost : 0);
+                        return (
+                          <div className="border border-slate-400 text-xs">
+                            <div className="grid bg-slate-100 border-b border-slate-400 font-bold text-center" style={colStyle}>
+                              {cols.map(c => <div key={c.key} className={cell}>{c.label}</div>)}
+                            </div>
+                            {printRowsWithRunningTotal.map(row => (
+                              <div key={row.monthKey} className="grid border-b border-slate-200 text-center items-center" style={colStyle}>
+                                {cols.map(c => {
+                                  if (c.key === 'month') return <div key={c.key} className={`${dataCell} font-bold bg-slate-50`}>{row.monthKey}</div>;
+                                  if (c.key === 'labor') return <div key={c.key} className={`${dataCell} text-right pr-2`}>{row.monthlyLaborCost.toLocaleString()}</div>;
+                                  if (c.key === 'safety') return <div key={c.key} className={`${dataCell} text-right pr-2`}>{row.monthlySafetyWorkerCost.toLocaleString()}</div>;
+                                  if (c.key === 'material') return <div key={c.key} className={`${dataCell} text-right pr-2`}>{row.monthlyMaterialCost.toLocaleString()}</div>;
+                                  if (c.key === 'monthTotal') return <div key={c.key} className={`${dataCell} text-right pr-2 font-bold`}>{getRowTotal(row).toLocaleString()}</div>;
+                                  if (c.key === 'running') return <div key={c.key} className={`${dataCell} text-right pr-2 font-bold text-indigo-700`}>{row.runningTotal.toLocaleString()}</div>;
+                                  return null;
+                                })}
+                              </div>
+                            ))}
+                            <div className="grid bg-slate-100 font-bold border-t border-slate-400 text-center items-center" style={colStyle}>
+                              {cols.map((c, i) => {
+                                if (c.key === 'month') return <div key={c.key} className={cell} style={{ gridColumn: `1 / span ${cols.length - 2}` }}>기간 합계</div>;
+                                if (c.key === 'monthTotal') return <div key={c.key} className={cell + ' text-right pr-2 text-indigo-900'}>{periodTotal.toLocaleString()}</div>;
+                                if (c.key === 'running') return <div key={c.key} className={'p-2 text-right pr-2 text-indigo-900'}>{periodTotal.toLocaleString()}</div>;
+                                return null;
+                              })}
+                            </div>
                           </div>
-                        ))}
-                        <div className="grid grid-cols-12 bg-slate-100 font-bold border-t border-slate-400 text-center items-center">
-                          <div className="col-span-8 border-r border-slate-300 p-2">기간 합계</div>
-                          <div className="col-span-2 border-r border-slate-300 p-2 text-right pr-2 text-indigo-900">{printPeriodTotalCost.toLocaleString()}</div>
-                          <div className="col-span-2 p-2 text-right pr-2 text-indigo-900">{printPeriodTotalCost.toLocaleString()}</div>
-                        </div>
-                      </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
