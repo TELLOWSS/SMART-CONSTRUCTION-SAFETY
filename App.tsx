@@ -129,6 +129,13 @@ function App() {
   const [printRangeEndMonth, setPrintRangeEndMonth] = useState<string>('');
   const [monthlyFrontCumulativeDisplay, setMonthlyFrontCumulativeDisplay] = useState<'both' | 'full' | 'current'>('both');
   const [restoreModalState, setRestoreModalState] = useState<RestoreModalState | null>(null);
+
+  // Accordion Section Collapse States in Setup Tab to reduce scroll fatigue (스크롤 압박 개선)
+  const [laborCollapsed, setLaborCollapsed] = useState(true);
+  const [safetyWorkersCollapsed, setSafetyWorkersCollapsed] = useState(true);
+  const [safetyItemsCollapsed, setSafetyItemsCollapsed] = useState(true);
+  const [laborPhotosCollapsed, setLaborPhotosCollapsed] = useState(true);
+  const [safetyPhotosCollapsed, setSafetyPhotosCollapsed] = useState(true);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const photoStateRef = useRef<{ laborPhotos: PhotoEvidence[]; safetyPhotos: PhotoEvidence[] }>({ laborPhotos: [], safetyPhotos: [] });
@@ -2004,6 +2011,43 @@ function App() {
         {activeTab === 'setup' && (
           <div className="space-y-8 animate-in fade-in duration-300">
             <ProjectHeader info={projectInfo} onChange={setProjectInfo} />
+
+            {/* Global Collapse/Expand Controller for Setup Tab (스크롤 압박 해소) */}
+            <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200/50 shadow-sm no-print">
+              <div className="text-xs font-bold text-slate-500 flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse"></span>
+                <span>설정 탭 화면 구성 관리 (접기/펼치기)</span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLaborCollapsed(false);
+                    setSafetyWorkersCollapsed(false);
+                    setSafetyItemsCollapsed(false);
+                    setLaborPhotosCollapsed(false);
+                    setSafetyPhotosCollapsed(false);
+                  }}
+                  className="px-3 py-1.5 text-xs font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg border border-indigo-100 transition-colors"
+                >
+                  모든 섹션 펼치기
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLaborCollapsed(true);
+                    setSafetyWorkersCollapsed(true);
+                    setSafetyItemsCollapsed(true);
+                    setLaborPhotosCollapsed(true);
+                    setSafetyPhotosCollapsed(true);
+                  }}
+                  className="px-3 py-1.5 text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg border border-slate-200 transition-colors"
+                >
+                  모든 섹션 접기
+                </button>
+              </div>
+            </div>
+
             <LaborCostTable
               workers={workers}
               setWorkers={setWorkers}
@@ -2011,6 +2055,8 @@ function App() {
               moveLabel="→ 안전시설로 이동"
               onDeleteWorker={deleteWorkerFromLabor}
               onResetAttendance={() => setAttendance({})}
+              isCollapsed={laborCollapsed}
+              onCollapseChange={setLaborCollapsed}
             />
 
             {/* Worker Transfer Divider */}
@@ -2032,8 +2078,15 @@ function App() {
               moveLabel="← 유도원으로 이동"
               onDeleteWorker={deleteWorkerFromSafety}
               onResetAttendance={() => setSafetyAttendance({})}
+              isCollapsed={safetyWorkersCollapsed}
+              onCollapseChange={setSafetyWorkersCollapsed}
             />
-            <SafetyCostTable items={safetyItems} setItems={setSafetyItems} />
+            <SafetyCostTable
+              items={safetyItems}
+              setItems={setSafetyItems}
+              isCollapsed={safetyItemsCollapsed}
+              onCollapseChange={setSafetyItemsCollapsed}
+            />
 
             {/* Labor Photos in Setup Tab for Transfer */}
             <PhotoLedger
@@ -2042,6 +2095,8 @@ function App() {
               title="유도원 및 감시자 인건비 증빙 사진"
               categoryOptions={laborWorkerRoles.length > 0 ? laborWorkerRoles : WORKER_ROLES}
               uploadQualityPreset={uploadQualityPreset}
+              isCollapsed={laborPhotosCollapsed}
+              onCollapseChange={setLaborPhotosCollapsed}
             />
 
             {/* Photo Transfer Divider */}
@@ -2120,6 +2175,8 @@ function App() {
               title="안전시설 인건비 증빙 사진"
               categoryOptions={safetyWorkerRoles.length > 0 ? safetyWorkerRoles : WORKER_ROLES}
               uploadQualityPreset={uploadQualityPreset}
+              isCollapsed={safetyPhotosCollapsed}
+              onCollapseChange={setSafetyPhotosCollapsed}
             />
             
             <div className="bg-gradient-to-r from-indigo-50 to-white p-6 rounded-2xl border border-indigo-100 text-sm text-indigo-900 flex items-start gap-4 shadow-sm">

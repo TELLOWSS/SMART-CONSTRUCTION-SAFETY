@@ -7,10 +7,22 @@ interface Props {
   items: SafetyItem[];
   setItems: React.Dispatch<React.SetStateAction<SafetyItem[]>>;
   readOnly?: boolean;
+  isCollapsed?: boolean;
+  onCollapseChange?: (collapsed: boolean) => void;
+  defaultCollapsed?: boolean;
 }
 
-export const SafetyCostTable: React.FC<Props> = ({ items, setItems, readOnly = false }) => {
-  const [sectionCollapsed, setSectionCollapsed] = useState(false);
+export const SafetyCostTable: React.FC<Props> = ({ items, setItems, readOnly = false, isCollapsed, onCollapseChange, defaultCollapsed = false }) => {
+  const [localCollapsed, setLocalCollapsed] = useState(defaultCollapsed);
+  const sectionCollapsed = isCollapsed !== undefined ? isCollapsed : localCollapsed;
+  
+  const toggleSectionCollapse = () => {
+    if (onCollapseChange) {
+      onCollapseChange(!sectionCollapsed);
+    } else {
+      setLocalCollapsed(!sectionCollapsed);
+    }
+  };
 
   const addItem = () => {
     const newItem: SafetyItem = {
@@ -92,7 +104,7 @@ export const SafetyCostTable: React.FC<Props> = ({ items, setItems, readOnly = f
     <div className="bg-white rounded-3xl shadow-sm border border-slate-100 mb-8 no-print hover:shadow-md transition-shadow">
       <div className="flex justify-between items-center p-8 pb-6">
         <button
-          onClick={() => setSectionCollapsed(!sectionCollapsed)}
+          onClick={toggleSectionCollapse}
           className="flex items-center gap-3 text-left flex-1 min-w-0"
         >
           <div className="bg-orange-100 p-2 rounded-xl text-orange-600 shrink-0">

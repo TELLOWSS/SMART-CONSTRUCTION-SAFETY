@@ -11,11 +11,23 @@ interface Props {
   title?: string;
   categoryOptions?: string[]; // Custom category list (e.g., from worker roles)
   uploadQualityPreset?: 'low' | 'balanced' | 'high';
+  isCollapsed?: boolean;
+  onCollapseChange?: (collapsed: boolean) => void;
+  defaultCollapsed?: boolean;
 }
 
-export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = false, title, categoryOptions, uploadQualityPreset = 'balanced' }) => {
+export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = false, title, categoryOptions, uploadQualityPreset = 'balanced', isCollapsed, onCollapseChange, defaultCollapsed = false }) => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [sectionCollapsed, setSectionCollapsed] = useState(false);
+  const [localCollapsed, setLocalCollapsed] = useState(defaultCollapsed);
+  const sectionCollapsed = isCollapsed !== undefined ? isCollapsed : localCollapsed;
+  
+  const toggleSectionCollapse = () => {
+    if (onCollapseChange) {
+      onCollapseChange(!sectionCollapsed);
+    } else {
+      setLocalCollapsed(!sectionCollapsed);
+    }
+  };
   const [inferredOrientations, setInferredOrientations] = useState<Record<string, 'portrait' | 'landscape' | 'square'>>({});
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<string[]>([]);
   const [bulkCategory, setBulkCategory] = useState<string>('');
@@ -339,7 +351,7 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
     <div className="bg-white rounded-3xl shadow-sm border border-slate-100 mb-8 no-print hover:shadow-md transition-shadow">
       <div className="flex justify-between items-center p-8 pb-6">
         <button
-          onClick={() => setSectionCollapsed(!sectionCollapsed)}
+          onClick={toggleSectionCollapse}
           className="flex items-center gap-3 text-left flex-1 min-w-0"
         >
           <div className="bg-rose-100 p-2 rounded-xl text-rose-600 shrink-0">

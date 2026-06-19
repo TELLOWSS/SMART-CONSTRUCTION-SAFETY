@@ -42,12 +42,24 @@ interface Props {
   onDeleteWorker?: (workerId: string) => void; // Override delete to allow attendance cleanup
   onResetAttendance?: () => void; // Reset output work hours (출력공수) to zero
   includeAllWorkersInReport?: boolean; // Print all registered workers regardless of attendance
+  isCollapsed?: boolean;
+  onCollapseChange?: (collapsed: boolean) => void;
+  defaultCollapsed?: boolean;
 }
 
-export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendance = {}, year = new Date().getFullYear(), month = new Date().getMonth() + 1, readOnly = false, sectionTitle = '유도원 및 감시자 인건비 산출 정보', reportTitle = '1. 유도원 및 감시자 인건비 제출 증빙 양식', onMoveWorker, moveLabel = '→ 이동', onDeleteWorker, onResetAttendance, includeAllWorkersInReport = false }) => {
+export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendance = {}, year = new Date().getFullYear(), month = new Date().getMonth() + 1, readOnly = false, sectionTitle = '유도원 및 감시자 인건비 산출 정보', reportTitle = '1. 유도원 및 감시자 인건비 제출 증빙 양식', onMoveWorker, moveLabel = '→ 이동', onDeleteWorker, onResetAttendance, includeAllWorkersInReport = false, isCollapsed, onCollapseChange, defaultCollapsed = false }) => {
   // For expanding detailed input in edit mode
   const [expandedWorkerId, setExpandedWorkerId] = useState<string | null>(null);
-  const [sectionCollapsed, setSectionCollapsed] = useState(false);
+  const [localCollapsed, setLocalCollapsed] = useState(defaultCollapsed);
+  const sectionCollapsed = isCollapsed !== undefined ? isCollapsed : localCollapsed;
+  
+  const toggleSectionCollapse = () => {
+    if (onCollapseChange) {
+      onCollapseChange(!sectionCollapsed);
+    } else {
+      setLocalCollapsed(!sectionCollapsed);
+    }
+  };
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
@@ -270,7 +282,7 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
     <div className="bg-white rounded-3xl shadow-sm border border-slate-100 mb-8 no-print hover:shadow-md transition-shadow">
       <div className="flex justify-between items-center p-8 pb-6">
         <button
-          onClick={() => setSectionCollapsed(!sectionCollapsed)}
+          onClick={toggleSectionCollapse}
           className="flex items-center gap-3 text-left flex-1 min-w-0"
         >
           <div className="bg-indigo-100 p-2 rounded-xl text-indigo-600 shrink-0">
