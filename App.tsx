@@ -1138,19 +1138,13 @@ function App() {
   snapshotByMonth.set(currentMonthKey, currentMonthGraphSnapshot);
 
   const graphMonthlyRows = graphSnapshotsForDisplay.map(([monthKey, snapshot]) => {
-    const prevMonthSnapshot = snapshotByMonth.get(getPrevMonthKey(monthKey));
-    const monthlyLaborCost = snapshot.laborCost - (prevMonthSnapshot?.laborCost || 0);
-    const monthlySafetyWorkerCost = snapshot.safetyWorkerCost - (prevMonthSnapshot?.safetyWorkerCost || 0);
-    const monthlyMaterialCost = snapshot.materialCost - (prevMonthSnapshot?.materialCost || 0);
-    const monthlyTotalCost = snapshot.totalCost - (prevMonthSnapshot?.totalCost || 0);
-
     return {
       monthKey,
       snapshot,
-      monthlyLaborCost,
-      monthlySafetyWorkerCost,
-      monthlyMaterialCost,
-      monthlyTotalCost,
+      monthlyLaborCost: snapshot.laborCost,
+      monthlySafetyWorkerCost: snapshot.safetyWorkerCost,
+      monthlyMaterialCost: snapshot.materialCost,
+      monthlyTotalCost: snapshot.totalCost,
     };
   });
 
@@ -1159,14 +1153,13 @@ function App() {
   const allMonthKeysForPrint = Array.from(snapshotByMonth.keys()).sort((a, b) => a.localeCompare(b));
   const monthlyDeltaRowsAll = allMonthKeysForPrint.map(monthKey => {
     const snapshot = snapshotByMonth.get(monthKey)!;
-    const prevMonthSnapshot = snapshotByMonth.get(getPrevMonthKey(monthKey));
     return {
       monthKey,
       snapshot,
-      monthlyLaborCost: snapshot.laborCost - (prevMonthSnapshot?.laborCost || 0),
-      monthlySafetyWorkerCost: snapshot.safetyWorkerCost - (prevMonthSnapshot?.safetyWorkerCost || 0),
-      monthlyMaterialCost: snapshot.materialCost - (prevMonthSnapshot?.materialCost || 0),
-      monthlyTotalCost: snapshot.totalCost - (prevMonthSnapshot?.totalCost || 0),
+      monthlyLaborCost: snapshot.laborCost,
+      monthlySafetyWorkerCost: snapshot.safetyWorkerCost,
+      monthlyMaterialCost: snapshot.materialCost,
+      monthlyTotalCost: snapshot.totalCost,
     };
   });
 
