@@ -7,7 +7,7 @@ import { PhotoLedger } from './components/PhotoLedger';
 import { DailyLogManager } from './components/DailyLogManager';
 import { RestoreOptionsModal, RestoreSelections, RestoreSummary } from './components/RestoreOptionsModal';
 import { ProjectInfo, Worker, PhotoEvidence, DailyAttendance, SafetyItem, WORKER_ROLES } from './types';
-import { Printer, Layout, FileText, ShieldCheck, CalendarCheck, HelpCircle, BarChart3, ChevronRight, Clock, Download, Upload, RotateCcw, ShoppingCart, Loader2, Save, FilePlus, ArrowLeftRight, Trash2, Lock, LockOpen } from 'lucide-react';
+import { Printer, Layout, FileText, ShieldCheck, CalendarCheck, HelpCircle, BarChart3, ChevronRight, ChevronUp, Clock, Download, Upload, RotateCcw, ShoppingCart, Loader2, Save, FilePlus, ArrowLeftRight, Trash2, Lock, LockOpen } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { 
   validatePhotoData, 
@@ -136,6 +136,7 @@ function App() {
   const [safetyItemsCollapsed, setSafetyItemsCollapsed] = useState(true);
   const [laborPhotosCollapsed, setLaborPhotosCollapsed] = useState(true);
   const [safetyPhotosCollapsed, setSafetyPhotosCollapsed] = useState(true);
+  const [showScrollTop, setShowScrollTop] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const photoStateRef = useRef<{ laborPhotos: PhotoEvidence[]; safetyPhotos: PhotoEvidence[] }>({ laborPhotos: [], safetyPhotos: [] });
@@ -162,6 +163,19 @@ function App() {
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Back to Top button visibility listener
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 300) {
+        setShowScrollTop(true);
+      } else {
+        setShowScrollTop(false);
+      }
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   // Prevent accidental data loss on refresh/close
@@ -2888,6 +2902,18 @@ function App() {
         onClose={() => setRestoreModalState(null)}
         onConfirm={applyRestoreSelections}
       />
+
+      {/* Floating Back to Top Button (맨 위로 이동 - 스크롤 압박 해소) */}
+      {showScrollTop && (
+        <button
+          type="button"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          className="fixed bottom-6 right-6 z-50 p-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg hover:shadow-xl hover:scale-110 active:scale-95 transition-all duration-300 animate-in fade-in slide-in-from-bottom-4 no-print flex items-center justify-center border border-indigo-500"
+          title="맨 위로 이동"
+        >
+          <ChevronUp className="w-6 h-6" />
+        </button>
+      )}
     </div>
   );
 }
