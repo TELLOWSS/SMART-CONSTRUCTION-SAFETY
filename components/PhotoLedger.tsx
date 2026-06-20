@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { PhotoEvidence, PHOTO_CATEGORIES, CompressionResult } from '../types';
 import { ImagePlus, MapPin, Calendar, X, Camera, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { estimateMemoryUsage, optimizeImage, processInChunks } from '../utils/photoOptimization';
+import { ZoomableImage } from './ZoomableImage';
 
 interface Props {
   photos: PhotoEvidence[];
@@ -309,8 +310,8 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
           {sortedPhotos.map((photo, index) => (
             <div key={photo.id} className="print-break-inside-avoid border-r border-b border-slate-400 p-2">
                 <div className={`${getFrameAspectClass(photo)} w-full overflow-hidden border border-slate-200 mb-2 relative bg-gray-100`}>
-                  <img src={photo.fileUrl} alt={photo.category} className={`object-cover ${getObjectPositionClass(photo)} w-full h-full`} />
-              </div>
+                  <ZoomableImage src={photo.fileUrl} alt={photo.category} className={`object-cover ${getObjectPositionClass(photo)} w-full h-full`} />
+                </div>
               <div className="text-sm">
                 <table className="w-full border-collapse border border-slate-300 text-xs">
                   <tbody>
@@ -448,9 +449,9 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
       <div className="px-8 pb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {photos.map((photo) => (
           <div key={photo.id} className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group">
-            <div className="aspect-video w-full bg-slate-100 relative border-b border-slate-100">
-              <img src={photo.fileUrl} alt="preview" className="w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+            <div className="aspect-video w-full bg-slate-100 relative border-b border-slate-100 overflow-hidden">
+              <ZoomableImage src={photo.fileUrl} alt="preview" />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none" />
               <label className="absolute top-2 left-2 bg-white/90 backdrop-blur-sm rounded-full p-1.5 shadow-md border border-slate-200 opacity-0 group-hover:opacity-100 transition-all cursor-pointer">
                 <input
                   type="checkbox"

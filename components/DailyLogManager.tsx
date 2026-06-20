@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Worker, PhotoEvidence, DailyAttendance, PHOTO_CATEGORIES, WORKER_ROLES, CompressionResult } from '../types';
 import { Calendar, ChevronLeft, ChevronRight, CheckCircle2, Circle, Camera, Plus, MapPin, ImagePlus, Edit3, User, Clock, Loader2, EyeOff, Eye } from 'lucide-react';
 import { estimateMemoryUsage, optimizeImage, processInChunks } from '../utils/photoOptimization';
+import { ZoomableImage } from './ZoomableImage';
 
 interface Props {
   workers: Worker[];
@@ -571,8 +572,8 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
            <div className="grid grid-cols-1 gap-5">
              {todaysPhotos.map(photo => (
                <div key={photo.id} className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-all duration-200 flex flex-col sm:flex-row group">
-                 <div className="relative w-full sm:w-48 h-40 sm:h-auto shrink-0 bg-slate-100">
-                   <img src={photo.fileUrl} alt="daily" className="w-full h-full object-cover" />
+                 <div className="relative w-full sm:w-48 h-40 sm:h-auto shrink-0 bg-slate-100 overflow-hidden">
+                   <ZoomableImage src={photo.fileUrl} alt="daily" />
                    <button 
                       onClick={() => removePhoto(photo.id, 'labor')}
                       className="absolute top-2 right-2 bg-black/40 hover:bg-red-500 text-white p-1.5 rounded-full transition-all backdrop-blur-sm opacity-0 group-hover:opacity-100"
@@ -630,8 +631,8 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
             <div className="grid grid-cols-1 gap-5">
               {todaysSafetyPhotos.map(photo => (
                 <div key={photo.id} className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-all duration-200 flex flex-col sm:flex-row group">
-                  <div className="relative w-full sm:w-48 h-40 sm:h-auto shrink-0 bg-slate-100">
-                    <img src={photo.fileUrl} alt="daily-safety" className="w-full h-full object-cover" />
+                  <div className="relative w-full sm:w-48 h-40 sm:h-auto shrink-0 bg-slate-100 overflow-hidden">
+                    <ZoomableImage src={photo.fileUrl} alt="daily-safety" />
                     <button 
                         onClick={() => removePhoto(photo.id, 'safety')}
                         className="absolute top-2 right-2 bg-black/40 hover:bg-red-500 text-white p-1.5 rounded-full transition-all backdrop-blur-sm opacity-0 group-hover:opacity-100"
