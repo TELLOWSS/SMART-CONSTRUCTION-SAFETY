@@ -2078,6 +2078,8 @@ function App() {
             <LaborCostTable
               workers={workers}
               setWorkers={setWorkers}
+              attendance={attendance}
+              attendanceRole={attendanceRole}
               onMoveWorker={moveWorkerToSafety}
               moveLabel="→ 안전시설로 이동"
               onDeleteWorker={deleteWorkerFromLabor}
@@ -2099,6 +2101,8 @@ function App() {
             <LaborCostTable
               workers={safetyWorkers}
               setWorkers={setSafetyWorkers}
+              attendance={safetyAttendance}
+              attendanceRole={safetyAttendanceRole}
               sectionTitle="안전시설 인건비 근로자 산출 정보"
               reportTitle="안전시설 인건비 근로자 증빙 양식"
               onMoveWorker={moveWorkerToLabor}
@@ -2646,6 +2650,7 @@ function App() {
                       workers={workers}
                       setWorkers={setWorkers}
                       attendance={attendance}
+                      attendanceRole={attendanceRole}
                       year={printReferenceYear}
                       month={printReferenceMonth}
                       readOnly
@@ -2832,6 +2837,7 @@ function App() {
                           workers={safetyWorkers}
                           setWorkers={setSafetyWorkers}
                           attendance={safetyAttendance}
+                          attendanceRole={safetyAttendanceRole}
                           year={printReferenceYear}
                           month={printReferenceMonth}
                           reportTitle="안전시설 인건비 근로자 증빙 양식"
