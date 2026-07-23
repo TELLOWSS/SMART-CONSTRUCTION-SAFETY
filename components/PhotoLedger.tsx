@@ -493,27 +493,25 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, workers, atten
       <input type="file" ref={slotFileInputRef} className="hidden" accept="image/*" onChange={handleSlotFileUpload} disabled={isProcessing} />
 
       {!sectionCollapsed && attendance && workers && year && month && (
-        <div className="mx-8 mb-4 p-5 bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border border-indigo-200 rounded-2xl shadow-xs">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4 pb-3 border-b border-indigo-100">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="bg-indigo-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">스마트 기능</span>
-                <h3 className="font-bold text-slate-800 text-base">출역일자 기준 세분화 공종 사진 자동 매칭</h3>
-              </div>
-              <p className="text-xs text-slate-600 mt-1">
-                {year}년 {month}월 근로자 출역 기록과 유도원 세분화 공종(갱폼, 지게차, 펌프카 등)을 기반으로 사진 날짜를 자동 일치시킵니다.
-              </p>
+        <div className="mx-8 mb-4 p-5 bg-gradient-to-r from-indigo-50/90 via-purple-50/90 to-pink-50/90 border border-indigo-200/80 rounded-2xl shadow-xs break-keep">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4 pb-3 border-b border-indigo-100/80">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="bg-indigo-600 text-white text-[11px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider whitespace-nowrap shrink-0">스마트 기능</span>
+              <h3 className="font-extrabold text-slate-800 text-base break-keep leading-snug">출역일자 기준 세분화 공종 사진 자동 매칭</h3>
             </div>
 
             <button
               type="button"
               onClick={autoMatchPhotosToAttendance}
-              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-2 shrink-0 cursor-pointer active:scale-95"
+              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-2 shrink-0 cursor-pointer whitespace-nowrap active:scale-95 self-start lg:self-auto"
             >
-              <RotateCcw className="w-4 h-4" />
-              <span>⚡ 출역일자별 사진 자동 매칭 실행</span>
+              <RotateCcw className="w-4 h-4 shrink-0" />
+              <span className="whitespace-nowrap">⚡ 출역일자별 사진 자동 매칭 실행</span>
             </button>
           </div>
+          <p className="text-xs text-slate-600 mb-3 break-keep leading-relaxed font-medium">
+            {year}년 {month}월 근로자 출역 기록과 유도원 세분화 공종(갱폼, 지게차, 펌프카 등)을 기반으로 사진 날짜를 자동 일치시킵니다.
+          </p>
 
           {/* Required Active Photo Slots Status Matrix */}
           {(() => {

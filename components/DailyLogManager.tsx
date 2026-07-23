@@ -910,36 +910,37 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
         {/* Right: Photo Input */}
         <div className="space-y-6">
           {/* Monthly Subdivided Role Bulk Photo Upload & Auto Match Card */}
-          <div className="bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 p-5 rounded-3xl border border-indigo-200 shadow-sm">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3 pb-3 border-b border-indigo-100">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="bg-indigo-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">월간 일괄 기능</span>
-                  <h4 className="font-bold text-slate-800 text-sm">세분화 공종별 사진 일괄 업로드 & 출역일자 자동 매칭</h4>
-                </div>
-                <p className="text-xs text-slate-600 mt-1">
-                  사진을 세분화 공종별로 한번에 업로드하면, 해당 월의 일일 근로자 출역 기록에 맞춰 사진 날짜가 자동 매칭됩니다.
-                </p>
+          <div className="bg-gradient-to-r from-indigo-50/90 via-purple-50/90 to-pink-50/90 p-5 rounded-3xl border border-indigo-200/80 shadow-sm break-keep">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-3 pb-3 border-b border-indigo-100/80">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="bg-indigo-600 text-white text-[11px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider whitespace-nowrap shrink-0 shadow-2xs">월간 일괄 기능</span>
+                <h4 className="font-extrabold text-slate-800 text-sm sm:text-base break-keep leading-snug">
+                  세분화 공종별 사진 일괄 업로드 & 출역일자 자동 매칭
+                </h4>
               </div>
               
               <button
                 type="button"
                 onClick={autoMatchAllPhotosInDailyLog}
-                className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95"
+                className="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-1.5 shrink-0 cursor-pointer whitespace-nowrap active:scale-95 self-start lg:self-auto"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>월간 사진 전체 자동 매칭</span>
+                <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+                <span className="whitespace-nowrap">월간 사진 전체 자동 매칭</span>
               </button>
             </div>
 
+            <p className="text-xs text-slate-600 mb-3 break-keep leading-relaxed font-medium">
+              사진을 세분화 공종별로 한번에 업로드하면, 해당 월의 일일 근로자 출역 기록에 맞춰 사진 날짜가 자동 매칭됩니다.
+            </p>
+
             {/* Select Subdivided Role and Upload Bulk Photos */}
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-white p-3 rounded-2xl border border-indigo-100">
-              <div className="sm:col-span-5">
-                <label className="block text-[10px] font-bold text-slate-400 mb-1">대상 세분화 공종 선택</label>
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center bg-white p-3.5 rounded-2xl border border-indigo-100/80 shadow-2xs">
+              <div className="sm:col-span-5 flex flex-col gap-1">
+                <label className="text-[11px] font-bold text-slate-500 whitespace-nowrap">대상 세분화 공종 선택</label>
                 <select
                   value={bulkUploadCategory || resolvedLaborCategories[0]}
                   onChange={(e) => setBulkUploadCategory(e.target.value)}
-                  className="w-full text-xs font-bold bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-indigo-900 outline-none focus:border-indigo-500 cursor-pointer"
+                  className="w-full text-xs font-bold bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-indigo-900 outline-none focus:border-indigo-500 cursor-pointer truncate"
                 >
                   {resolvedLaborCategories.map(cat => (
                     <option key={cat} value={cat}>{cat}</option>
@@ -951,10 +952,10 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
                 <button
                   type="button"
                   onClick={() => triggerBulkRolePhotoUpload(bulkUploadCategory || resolvedLaborCategories[0])}
-                  className="w-full px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                  className="w-full px-4 py-2.5 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap active:scale-95 mt-1 sm:mt-0"
                 >
-                  <ImagePlus className="w-4 h-4 text-indigo-400" />
-                  <span>[{bulkUploadCategory || resolvedLaborCategories[0]}] 사진 여러 장 한번에 일괄 업로드</span>
+                  <ImagePlus className="w-4 h-4 text-indigo-400 shrink-0" />
+                  <span className="truncate font-bold">[{bulkUploadCategory || resolvedLaborCategories[0]}] 사진 일괄 업로드</span>
                 </button>
                 <input
                   type="file"
@@ -969,45 +970,45 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
             </div>
           </div>
 
-          <div className="bg-white p-4 sm:p-8 rounded-3xl shadow-sm border border-slate-100 h-fit">
-             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-            <h3 className="text-xl font-bold flex items-center gap-3 text-slate-800">
-              <div className="bg-rose-100 p-2 rounded-xl text-rose-600">
-                <Camera className="w-5 h-5" />
-              </div>
-              금일 작업 사진
-            </h3>
-            
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold">
-                <span className="text-slate-500">업로드 대상:</span>
-                <select
-                  value={selectedLaborUploadCategory || resolvedLaborCategories[0]}
-                  onChange={(e) => setSelectedLaborUploadCategory(e.target.value)}
-                  className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-indigo-900 outline-none focus:border-indigo-500 cursor-pointer"
-                >
-                  {resolvedLaborCategories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
+          <div className="bg-white p-5 sm:p-8 rounded-3xl shadow-sm border border-slate-100 h-fit break-keep">
+             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-100">
+              <h3 className="text-lg sm:text-xl font-extrabold flex items-center gap-3 text-slate-800 whitespace-nowrap">
+                <div className="bg-rose-100 p-2.5 rounded-2xl text-rose-600 shrink-0">
+                  <Camera className="w-5 h-5" />
+                </div>
+                <span className="whitespace-nowrap">금일 작업 사진</span>
+              </h3>
+              
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold">
+                  <span className="text-slate-400 whitespace-nowrap shrink-0">업로드 대상:</span>
+                  <select
+                    value={selectedLaborUploadCategory || resolvedLaborCategories[0]}
+                    onChange={(e) => setSelectedLaborUploadCategory(e.target.value)}
+                    className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-indigo-900 outline-none focus:border-indigo-500 cursor-pointer font-bold truncate max-w-[150px]"
+                  >
+                    {resolvedLaborCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
 
-              <label className={`cursor-pointer flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 ${isProcessing ? 'opacity-70 cursor-wait' : ''}`}>
-                {isProcessing ? <Loader2 className="w-3 h-3 animate-spin"/> : <Plus className="w-3 h-3" />}
-                {isProcessing ? '처리중...' : '사진 추가'}
-                <input type="file" className="hidden" accept="image/*" onChange={(e) => handlePhotoUpload(e, 'labor')} disabled={isProcessing} multiple />
-              </label>
-              <input
-                type="file"
-                ref={workerFileInputRef}
-                className="hidden"
-                accept="image/*"
-                onChange={(e) => handlePhotoUpload(e, 'labor', workerPhotoUploadTargetRole)}
-                disabled={isProcessing}
-                multiple
-              />
-            </div>
-           </div>
+                <label className={`cursor-pointer flex items-center gap-2 bg-slate-900 hover:bg-black text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 whitespace-nowrap shrink-0 ${isProcessing ? 'opacity-70 cursor-wait' : ''}`}>
+                  {isProcessing ? <Loader2 className="w-4 h-4 animate-spin shrink-0"/> : <Plus className="w-4 h-4 shrink-0" />}
+                  <span className="whitespace-nowrap">{isProcessing ? '처리중...' : '사진 추가'}</span>
+                  <input type="file" className="hidden" accept="image/*" onChange={(e) => handlePhotoUpload(e, 'labor')} disabled={isProcessing} multiple />
+                </label>
+                <input
+                  type="file"
+                  ref={workerFileInputRef}
+                  className="hidden"
+                  accept="image/*"
+                  onChange={(e) => handlePhotoUpload(e, 'labor', workerPhotoUploadTargetRole)}
+                  disabled={isProcessing}
+                  multiple
+                />
+              </div>
+             </div>
 
            {/* Category Filter Chips */}
            {todaysPhotos.length > 0 && (
