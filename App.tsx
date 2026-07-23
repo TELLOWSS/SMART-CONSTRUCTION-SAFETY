@@ -100,8 +100,10 @@ function App() {
   const [projectInfo, setProjectInfo] = useState<ProjectInfo>(INITIAL_PROJECT_INFO);
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [attendance, setAttendance] = useState<DailyAttendance>({});
+  const [attendanceRole, setAttendanceRole] = useState<DailyAttendanceRole>({});
   const [safetyWorkers, setSafetyWorkers] = useState<Worker[]>([]);
   const [safetyAttendance, setSafetyAttendance] = useState<DailyAttendance>({});
+  const [safetyAttendanceRole, setSafetyAttendanceRole] = useState<DailyAttendanceRole>({});
   const [safetyItems, setSafetyItems] = useState<SafetyItem[]>([]);
   const [laborPhotos, setLaborPhotos] = useState<PhotoEvidence[]>([]);
   const [safetyPhotos, setSafetyPhotos] = useState<PhotoEvidence[]>([]);
@@ -2505,6 +2507,7 @@ function App() {
                               workers={workers}
                               setWorkers={setWorkers}
                               attendance={attendance}
+                              attendanceRole={attendanceRole}
                               year={rowYear}
                               month={rowMonth}
                               readOnly

@@ -9,6 +9,8 @@ interface Props {
   workers: Worker[];
   attendance: DailyAttendance;
   setAttendance: React.Dispatch<React.SetStateAction<DailyAttendance>>;
+  attendanceRole?: DailyAttendanceRole;
+  setAttendanceRole?: React.Dispatch<React.SetStateAction<DailyAttendanceRole>>;
   photos: PhotoEvidence[];
   setPhotos: React.Dispatch<React.SetStateAction<PhotoEvidence[]>>;
   safetyPhotos?: PhotoEvidence[];
@@ -18,12 +20,14 @@ interface Props {
   safetyWorkers?: Worker[];
   safetyAttendance?: DailyAttendance;
   setSafetyAttendance?: React.Dispatch<React.SetStateAction<DailyAttendance>>;
+  safetyAttendanceRole?: DailyAttendanceRole;
+  setSafetyAttendanceRole?: React.Dispatch<React.SetStateAction<DailyAttendanceRole>>;
   uploadQualityPreset?: 'low' | 'balanced' | 'high';
   laborCategoryOptions?: string[];
   safetyCategoryOptions?: string[];
 }
 
-export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAttendance, photos, setPhotos, safetyPhotos = [], setSafetyPhotos, year, month, safetyWorkers = [], safetyAttendance = {}, setSafetyAttendance, uploadQualityPreset = 'balanced', laborCategoryOptions, safetyCategoryOptions }) => {
+export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAttendance, attendanceRole = {}, setAttendanceRole, photos, setPhotos, safetyPhotos = [], setSafetyPhotos, year, month, safetyWorkers = [], safetyAttendance = {}, setSafetyAttendance, safetyAttendanceRole = {}, setSafetyAttendanceRole, uploadQualityPreset = 'balanced', laborCategoryOptions, safetyCategoryOptions }) => {
   // Use local date string instead of UTC to fix timezone issues
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const now = new Date();
@@ -53,13 +57,10 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
   }, [year, month]);
 
   const changeDate = (days: number) => {
-    const date = new Date(selectedDate);
-    date.setDate(date.getDate() + days);
-    
-    // Optional: You could restrict navigation to within the selected month here
-    // For now, we allow navigating freely, but users should know report filters by month
-    
-    setSelectedDate(date.toISOString().split('T')[0]);
+    const current = new Date(selectedDate);
+    current.setDate(current.getDate() + days);
+    const newDate = current.toISOString().split('T')[0];
+    setSelectedDate(newDate);
   };
 
   // 캘린더 관련 헬퍼 함수
@@ -125,23 +126,50 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
     return days;
   };
 
-  const updateAttendance = (workerId: string, value: number) => {
-    setAttendance(prev => {
-      const currentDay = prev[selectedDate] || {};
-      const updatedDay = { ...currentDay, [workerId]: value };
-      if (value === 0) delete updatedDay[workerId];
-      return { ...prev, [selectedDate]: updatedDay };
+  const updateAttendance = (workerId: string, gongsu: number) => {
+    setAttendance(prevAttendance => {
+      const dayAttendance = { ...(prevAttendance[selectedDate] || {}) };
+      
+      if (gongsu === 0) {
+        delete dayAttendance[workerId];
+      } else {
+        dayAttendance[workerId] = gongsu;
+      }
+
+      return {
+        ...prevAttendance,
+        [selectedDate]: dayAttendance
+      };
     });
   };
 
-  const updateSafetyAttendance = (workerId: string, value: number) => {
+  const updateSafetyAttendance = (workerId: string, gongsu: number) => {
     if (!setSafetyAttendance) return;
-    setSafetyAttendance(prev => {
-      const currentDay = prev[selectedDate] || {};
-      const updatedDay = { ...currentDay, [workerId]: value };
-      if (value === 0) delete updatedDay[workerId];
-      return { ...prev, [selectedDate]: updatedDay };
+    setSafetyAttendance(prevAttendance => {
+      const dayAttendance = { ...(prevAttendance[selectedDate] || {}) };
+      
+      if (gongsu === 0) {
+        delete dayAttendance[workerId];
+      } else {
+        dayAttendance[workerId] = gongsu;
+      }
+
+      return {
+        ...prevAttendance,
+        [selectedDate]: dayAttendance
+      };
     });
+  };
+
+  const handleRoleChange = (workerId: string, newRole: string) => {
+    if (!setAttendanceRole) return;
+    setAttendanceRole(prev => ({
+      ...prev,
+      [selectedDate]: {
+        ...(prev[selectedDate] || {}),
+        [workerId]: newRole
+      }
+    }));
   };
 
   // Filter workers based on hideZeroAttendance toggle
@@ -162,7 +190,7 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
   const todaysPhotos = photos.filter(p => p.date === selectedDate);
   const todaysSafetyPhotos = safetyPhotos.filter(p => p.date === selectedDate);
   const resolvedLaborCategories = (laborCategoryOptions && laborCategoryOptions.length > 0 ? laborCategoryOptions : WORKER_ROLES);
-  const resolvedSafetyCategories = (safetyCategoryOptions && safetyCategoryOptions.length > 0 ? safetyCategoryOptions : PHOTO_CATEGORIES);
+  const resolvedSafetyCategories = (safetyCategoryOptions && safetyCategoryOptions.length > 0 ? safetyCategoryOptions : WORKER_ROLES);
 
   // Real-time daily & monthly attendance statistics
   const todaysLaborGongsu = workers.reduce((sum, w) => sum + (attendance[selectedDate]?.[w.id] || 0), 0);
@@ -188,11 +216,11 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
     return sum + Object.values(dayAttendance).reduce((s, v) => s + v, 0);
   }, 0);
 
-  // Today's breakdown by subdivided role
+  // Today's breakdown by subdivided role (considering daily role overrides)
   const todaysRoleBreakdown = workers.reduce((acc, worker) => {
     const gongsu = attendance[selectedDate]?.[worker.id] || 0;
     if (gongsu > 0) {
-      const role = worker.role || '기타';
+      const role = attendanceRole[selectedDate]?.[worker.id] || worker.role || '기타';
       if (!acc[role]) {
         acc[role] = { count: 0, gongsu: 0 };
       }
@@ -567,6 +595,8 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
             ) : (
               filteredWorkers.map(worker => {
                 const currentGongsu = attendance[selectedDate]?.[worker.id] || 0;
+                const currentAssignedRole = attendanceRole[selectedDate]?.[worker.id] || worker.role;
+                const isOverridden = Boolean(attendanceRole[selectedDate]?.[worker.id] && attendanceRole[selectedDate]?.[worker.id] !== worker.role);
                 
                 return (
                   <div key={worker.id} className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl border transition-all duration-200 group ${currentGongsu > 0 ? 'bg-indigo-50/50 border-indigo-200 shadow-sm' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
@@ -575,16 +605,34 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
                         {worker.name.charAt(0)}
                       </div>
                       <div>
-                        <div className="font-bold text-slate-800 text-base">{worker.name}</div>
-                        <div className="text-xs text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded-full w-fit mt-1">{worker.role}</div>
+                        <div className="font-bold text-slate-800 text-base flex items-center gap-2">
+                          <span>{worker.name}</span>
+                          {isOverridden && (
+                            <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded border border-amber-200">
+                              일별 변경됨 (기본: {worker.role})
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className="text-[10px] text-slate-400 font-bold">금일 직종:</span>
+                          <select
+                            value={currentAssignedRole}
+                            onChange={(e) => handleRoleChange(worker.id, e.target.value)}
+                            className="text-xs font-bold bg-white border border-slate-300 rounded-lg px-2 py-0.5 text-indigo-900 outline-none focus:border-indigo-500 cursor-pointer"
+                          >
+                            {resolvedLaborCategories.map(r => (
+                              <option key={r} value={r}>{r}</option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
                     </div>
                     
                     <div className="flex flex-wrap items-center gap-2 bg-slate-50 p-1 rounded-xl w-full sm:w-auto">
                       <button
-                        onClick={() => triggerWorkerPhotoUpload(worker.role)}
+                        onClick={() => triggerWorkerPhotoUpload(currentAssignedRole)}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors border border-indigo-200"
-                        title={`${worker.role} 사진 업로드`}
+                        title={`${currentAssignedRole} 사진 업로드`}
                       >
                         <Camera className="w-3.5 h-3.5 text-indigo-600" />
                         <span>사진</span>

@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Worker, WORKER_ROLES, DailyAttendance } from '../types';
+import { Worker, WORKER_ROLES, DailyAttendance, DailyAttendanceRole } from '../types';
 import { Plus, Trash2, Users, AlertCircle, CalendarDays, ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown, RotateCcw } from 'lucide-react';
 
 // 주민등록번호 뒷자리 마스킹 (개인정보보호법 준수)
@@ -32,6 +32,7 @@ interface Props {
   workers: Worker[];
   setWorkers: React.Dispatch<React.SetStateAction<Worker[]>>;
   attendance?: DailyAttendance; // Added for report view
+  attendanceRole?: DailyAttendanceRole; // Added for daily role override
   year?: number; // Added for report view
   month?: number; // Added for report view
   readOnly?: boolean;
@@ -47,7 +48,7 @@ interface Props {
   defaultCollapsed?: boolean;
 }
 
-export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendance = {}, year = new Date().getFullYear(), month = new Date().getMonth() + 1, readOnly = false, sectionTitle = '유도원 및 감시자 인건비 산출 정보', reportTitle = '1. 유도원 및 감시자 인건비 제출 증빙 양식', onMoveWorker, moveLabel = '→ 이동', onDeleteWorker, onResetAttendance, includeAllWorkersInReport = false, isCollapsed, onCollapseChange, defaultCollapsed = false }) => {
+export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendance = {}, attendanceRole = {}, year = new Date().getFullYear(), month = new Date().getMonth() + 1, readOnly = false, sectionTitle = '유도원 및 감시자 인건비 산출 정보', reportTitle = '1. 유도원 및 감시자 인건비 제출 증빙 양식', onMoveWorker, moveLabel = '→ 이동', onDeleteWorker, onResetAttendance, includeAllWorkersInReport = false, isCollapsed, onCollapseChange, defaultCollapsed = false }) => {
   // For expanding detailed input in edit mode
   const [expandedWorkerId, setExpandedWorkerId] = useState<string | null>(null);
   const [localCollapsed, setLocalCollapsed] = useState(defaultCollapsed);
@@ -160,6 +161,11 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
     return attendance[dateStr]?.[workerId];
   };
 
+  const getDailyWorkerRole = (worker: Worker, day: number): string => {
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return attendanceRole[dateStr]?.[worker.id] || worker.role || '기타';
+  };
+
   const getMonthlyDaysWorked = (workerId: string): number => {
     return daysArray.reduce((sum, day) => sum + (getDailyValue(workerId, day) || 0), 0);
   };
@@ -190,23 +196,32 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
       return acc + reportWorkers.filter(worker => (getDailyValue(worker.id, day) || 0) > 0).length;
     }, 0);
 
-    // Subdivided role summary breakdown
-    const roleSummaryMap = reportWorkers.reduce((acc, worker) => {
-      const role = worker.role || '기타';
-      const gongsu = getMonthlyDaysWorked(worker.id);
-      const cost = gongsu * worker.dailyRate;
-      
-      if (!acc[role]) {
-        acc[role] = { role, workerCount: 0, gongsu: 0, cost: 0 };
-      }
-      acc[role].workerCount += 1;
-      acc[role].gongsu += gongsu;
-      acc[role].cost += cost;
-      return acc;
-    }, {} as Record<string, { role: string; workerCount: number; gongsu: number; cost: number }>);
+    // Subdivided role summary breakdown (considering daily role overrides)
+    const roleSummaryMap: Record<string, { role: string; workerSet: Set<string>; gongsu: number; cost: number }> = {};
 
-    const roleSummaries = Object.values(roleSummaryMap).sort((a, b) => b.cost - a.cost);
-    const uniqueRolesInReport = Array.from(new Set(reportWorkers.map(w => w.role || '기타')));
+    reportWorkers.forEach(worker => {
+      daysArray.forEach(day => {
+        const dailyGongsu = getDailyValue(worker.id, day) || 0;
+        if (dailyGongsu > 0) {
+          const role = getDailyWorkerRole(worker, day);
+          if (!roleSummaryMap[role]) {
+            roleSummaryMap[role] = { role, workerSet: new Set(), gongsu: 0, cost: 0 };
+          }
+          roleSummaryMap[role].workerSet.add(worker.id);
+          roleSummaryMap[role].gongsu += dailyGongsu;
+          roleSummaryMap[role].cost += dailyGongsu * worker.dailyRate;
+        }
+      });
+    });
+
+    const roleSummaries = Object.values(roleSummaryMap)
+      .map(item => ({ role: item.role, workerCount: item.workerSet.size, gongsu: item.gongsu, cost: item.cost }))
+      .sort((a, b) => b.cost - a.cost);
+
+    const uniqueRolesInReport = Array.from(new Set([
+      ...reportWorkers.map(w => w.role || '기타'),
+      ...daysArray.flatMap(day => reportWorkers.map(w => getDailyWorkerRole(w, day)))
+    ]));
 
     return (
       <div className="mb-8 break-inside-avoid">
@@ -384,9 +399,13 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
 
               {/* Table Rows: One row per unique role */}
               {uniqueRolesInReport.map((role) => {
-                const roleWorkers = reportWorkers.filter(w => (w.role || '기타') === role);
                 const roleMonthlyTotal = daysArray.reduce((acc, day) => {
-                  return acc + roleWorkers.reduce((sum, w) => sum + (getDailyValue(w.id, day) || 0), 0);
+                  return acc + reportWorkers.reduce((sum, w) => {
+                    if (getDailyWorkerRole(w, day) === role) {
+                      return sum + (getDailyValue(w.id, day) || 0);
+                    }
+                    return sum;
+                  }, 0);
                 }, 0);
 
                 return (
@@ -396,7 +415,12 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
                     </div>
                     <div className="flex-1 grid grid-cols-[repeat(31,minmax(0,1fr))] text-center">
                       {daysArray.map(day => {
-                        const dailySum = roleWorkers.reduce((sum, w) => sum + (getDailyValue(w.id, day) || 0), 0);
+                        const dailySum = reportWorkers.reduce((sum, w) => {
+                          if (getDailyWorkerRole(w, day) === role) {
+                            return sum + (getDailyValue(w.id, day) || 0);
+                          }
+                          return sum;
+                        }, 0);
                         return (
                           <div key={day} className="border-r border-slate-200 last:border-r-0 h-5 flex items-center justify-center">
                             <span className={`text-[8.5px] font-bold tracking-tighter ${dailySum > 0 ? 'text-indigo-900 font-extrabold' : 'text-slate-300'}`}>

@@ -56,6 +56,7 @@ export interface PhotoEvidence {
 }
 
 export type DailyAttendance = Record<string, Record<string, number>>; // Date (YYYY-MM-DD) -> WorkerID -> Gongsu
+export type DailyAttendanceRole = Record<string, Record<string, string>>; // Date (YYYY-MM-DD) -> WorkerID -> Role Override
 
 export const WORKER_ROLES = [
   "안전반장",
