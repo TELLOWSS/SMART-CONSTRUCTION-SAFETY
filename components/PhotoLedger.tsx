@@ -1,13 +1,18 @@
 
-import React, { useEffect, useState } from 'react';
-import { PhotoEvidence, PHOTO_CATEGORIES, CompressionResult } from '../types';
-import { ImagePlus, MapPin, Calendar, X, Camera, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { PhotoEvidence, PHOTO_CATEGORIES, CompressionResult, Worker, DailyAttendance, DailyAttendanceRole } from '../types';
+import { ImagePlus, MapPin, Calendar, X, Camera, Loader2, ChevronDown, ChevronUp, RotateCcw, CheckCircle2, AlertCircle } from 'lucide-react';
 import { estimateMemoryUsage, optimizeImage, processInChunks } from '../utils/photoOptimization';
 import { ZoomableImage } from './ZoomableImage';
 
 interface Props {
   photos: PhotoEvidence[];
   setPhotos: React.Dispatch<React.SetStateAction<PhotoEvidence[]>>;
+  workers?: Worker[];
+  attendance?: DailyAttendance;
+  attendanceRole?: DailyAttendanceRole;
+  year?: number;
+  month?: number;
   readOnly?: boolean;
   title?: string;
   categoryOptions?: string[]; // Custom category list (e.g., from worker roles)
@@ -17,7 +22,7 @@ interface Props {
   defaultCollapsed?: boolean;
 }
 
-export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = false, title, categoryOptions, uploadQualityPreset = 'balanced', isCollapsed, onCollapseChange, defaultCollapsed = false }) => {
+export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, workers, attendance, attendanceRole, year, month, readOnly = false, title, categoryOptions, uploadQualityPreset = 'balanced', isCollapsed, onCollapseChange, defaultCollapsed = false }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [localCollapsed, setLocalCollapsed] = useState(defaultCollapsed);
   const sectionCollapsed = isCollapsed !== undefined ? isCollapsed : localCollapsed;
@@ -34,6 +39,123 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
   const [bulkCategory, setBulkCategory] = useState<string>('');
   const [bulkDescription, setBulkDescription] = useState<string>('');
   const [bulkDate, setBulkDate] = useState<string>('');
+
+  const [slotTarget, setSlotTarget] = useState<{ date: string; role: string } | null>(null);
+  const slotFileInputRef = useRef<HTMLInputElement>(null);
+
+  const triggerSlotUpload = (date: string, role: string) => {
+    setSlotTarget({ date, role });
+    if (slotFileInputRef.current) {
+      slotFileInputRef.current.value = '';
+      slotFileInputRef.current.click();
+    }
+  };
+
+  const handleSlotFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!slotTarget || !e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+    setIsProcessing(true);
+    try {
+      const { blob } = await optimizeImage(file, 1280, 1280, 0.68);
+      let orientation: 'portrait' | 'landscape' | 'square' = 'landscape';
+      try {
+        orientation = await getImageOrientation(blob);
+      } catch {}
+      const newPhoto: PhotoEvidence = {
+        id: crypto.randomUUID(),
+        fileUrl: URL.createObjectURL(blob),
+        category: slotTarget.role,
+        date: slotTarget.date,
+        description: '',
+        location: '',
+        orientation,
+      };
+      setPhotos(prev => [...prev, newPhoto]);
+    } catch (err) {
+      alert("사진 추가 중 오류가 발생했습니다.");
+    } finally {
+      setIsProcessing(false);
+      setSlotTarget(null);
+      e.target.value = '';
+    }
+  };
+
+  // --- Smart Photo Auto-Matching Logic ---
+  const autoMatchPhotosToAttendance = () => {
+    if (!attendance || !workers || workers.length === 0 || !year || !month) {
+      alert("출역 기록 데이터가 연동되지 않았습니다.");
+      return;
+    }
+
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const activeSlotsByRole: Record<string, string[]> = {};
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const dayAttendance = attendance[dateStr] || {};
+      
+      const activeRolesOnDay = new Set<string>();
+      workers.forEach(w => {
+        const gongsu = dayAttendance[w.id] || 0;
+        if (gongsu > 0) {
+          const role = (attendanceRole?.[dateStr]?.[w.id]) || w.role || '기타';
+          activeRolesOnDay.add(role);
+        }
+      });
+
+      activeRolesOnDay.forEach(role => {
+        if (!activeSlotsByRole[role]) activeSlotsByRole[role] = [];
+        activeSlotsByRole[role].push(dateStr);
+      });
+    }
+
+    const roleKeys = Object.keys(activeSlotsByRole);
+    if (roleKeys.length === 0) {
+      alert(`${year}년 ${month}월에 출역한 근로자 기록이 없어 매칭할 수 없습니다.`);
+      return;
+    }
+
+    let updatedCount = 0;
+    const updatedPhotos = [...photos];
+
+    // For each role, distribute photos across active dates sequentially
+    roleKeys.forEach(role => {
+      const activeDates = activeSlotsByRole[role];
+      const rolePhotos = updatedPhotos.filter(p => p.category === role);
+
+      rolePhotos.forEach((photo, idx) => {
+        const targetDate = activeDates[idx % activeDates.length];
+        if (photo.date !== targetDate) {
+          const pIndex = updatedPhotos.findIndex(p => p.id === photo.id);
+          if (pIndex !== -1) {
+            updatedPhotos[pIndex] = { ...updatedPhotos[pIndex], date: targetDate };
+            updatedCount++;
+          }
+        }
+      });
+    });
+
+    setPhotos(updatedPhotos);
+
+    // Summary of missing photos per active role
+    const missingSlotSummary: string[] = [];
+    roleKeys.forEach(role => {
+      const activeDates = activeSlotsByRole[role];
+      const photoCount = updatedPhotos.filter(p => p.category === role).length;
+      if (photoCount < activeDates.length) {
+        missingSlotSummary.push(`• [${role}]: 출역 ${activeDates.length}일 중 사진 ${photoCount}장 (부족: ${activeDates.length - photoCount}장)`);
+      }
+    });
+
+    let message = `✅ 총 ${updatedCount}장의 사진이 해당 월의 출역일자에 맞게 세분화 공종별로 자동 매칭되었습니다!\n`;
+    if (missingSlotSummary.length > 0) {
+      message += `\n⚠️ 아래 항목은 출역일수에 비해 증빙 사진이 부족합니다:\n${missingSlotSummary.join('\n')}\n\n[세분화 공종별 사진 매칭 현황] 카드에서 부족한 날짜의 [+사진] 버튼으로 손쉽게 추가하실 수 있습니다.`;
+    } else {
+      message += `\n🎉 모든 출역일자의 세분화 공종별 사진 매칭이 완벽히 완료되었습니다!`;
+    }
+
+    alert(message);
+  };
 
   const availableCategories = (categoryOptions && categoryOptions.length > 0) ? categoryOptions : PHOTO_CATEGORIES;
 
@@ -367,6 +489,112 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, readOnly = fal
           <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} disabled={isProcessing} multiple />
         </label>
       </div>
+
+      <input type="file" ref={slotFileInputRef} className="hidden" accept="image/*" onChange={handleSlotFileUpload} disabled={isProcessing} />
+
+      {!sectionCollapsed && attendance && workers && year && month && (
+        <div className="mx-8 mb-4 p-5 bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border border-indigo-200 rounded-2xl shadow-xs">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4 pb-3 border-b border-indigo-100">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="bg-indigo-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">스마트 기능</span>
+                <h3 className="font-bold text-slate-800 text-base">출역일자 기준 세분화 공종 사진 자동 매칭</h3>
+              </div>
+              <p className="text-xs text-slate-600 mt-1">
+                {year}년 {month}월 근로자 출역 기록과 유도원 세분화 공종(갱폼, 지게차, 펌프카 등)을 기반으로 사진 날짜를 자동 일치시킵니다.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={autoMatchPhotosToAttendance}
+              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-2 shrink-0 cursor-pointer active:scale-95"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>⚡ 출역일자별 사진 자동 매칭 실행</span>
+            </button>
+          </div>
+
+          {/* Required Active Photo Slots Status Matrix */}
+          {(() => {
+            const daysInMonth = new Date(year, month, 0).getDate();
+            const activeSlotsByRole: Record<string, string[]> = {};
+
+            for (let day = 1; day <= daysInMonth; day++) {
+              const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+              const dayAttendance = attendance[dateStr] || {};
+              
+              const activeRolesOnDay = new Set<string>();
+              workers.forEach(w => {
+                const gongsu = dayAttendance[w.id] || 0;
+                if (gongsu > 0) {
+                  const role = (attendanceRole?.[dateStr]?.[w.id]) || w.role || '기타';
+                  activeRolesOnDay.add(role);
+                }
+              });
+
+              activeRolesOnDay.forEach(role => {
+                if (!activeSlotsByRole[role]) activeSlotsByRole[role] = [];
+                activeSlotsByRole[role].push(dateStr);
+              });
+            }
+
+            const roleEntries = Object.entries(activeSlotsByRole);
+            if (roleEntries.length === 0) return null;
+
+            return (
+              <div className="space-y-3">
+                <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <span>📋 세분화 공종별 출역 현황 & 증빙 사진 매칭 상태</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {roleEntries.map(([role, activeDates]) => {
+                    const rolePhotos = photos.filter(p => p.category === role);
+                    const isMatched = rolePhotos.length >= activeDates.length;
+
+                    return (
+                      <div key={role} className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className="font-bold text-slate-800 text-xs truncate" title={role}>{role}</span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isMatched ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-rose-100 text-rose-800 border border-rose-200'}`}>
+                            {isMatched ? `🟢 매칭 완료 (${rolePhotos.length}/${activeDates.length}일)` : `🔴 ${activeDates.length - rolePhotos.length}장 부족 (${rolePhotos.length}/${activeDates.length}일)`}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {activeDates.map(dateStr => {
+                            const hasPhoto = photos.some(p => p.category === role && p.date === dateStr);
+                            const dayNum = parseInt(dateStr.split('-')[2], 10);
+
+                            return (
+                              <div key={dateStr} className={`text-[10px] px-2 py-1 rounded-lg border flex items-center gap-1 ${hasPhoto ? 'bg-indigo-50 text-indigo-900 border-indigo-200 font-bold' : 'bg-slate-50 text-slate-400 border-slate-200 font-normal'}`}>
+                                <span>{dayNum}일</span>
+                                {hasPhoto ? (
+                                  <CheckCircle2 className="w-3 h-3 text-indigo-600" />
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => triggerSlotUpload(dateStr, role)}
+                                    className="text-[9px] bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold px-1 rounded border border-rose-200 transition-colors ml-0.5 cursor-pointer"
+                                    title={`${dateStr} ${role} 사진 추가`}
+                                  >
+                                    +사진
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
 
       {!sectionCollapsed && photos.length > 0 && (
         <div className="px-8 pb-4 flex flex-col gap-3 border-b border-slate-100">

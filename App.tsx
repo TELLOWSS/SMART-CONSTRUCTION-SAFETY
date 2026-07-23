@@ -2123,8 +2123,13 @@ function App() {
             <PhotoLedger
               photos={laborPhotos}
               setPhotos={setLaborPhotos}
+              workers={workers}
+              attendance={attendance}
+              attendanceRole={attendanceRole}
+              year={projectInfo.year}
+              month={projectInfo.month}
               title="유도원 및 감시자 인건비 증빙 사진"
-              categoryOptions={laborWorkerRoles.length > 0 ? laborWorkerRoles : WORKER_ROLES}
+              categoryOptions={Array.from(new Set([...WORKER_ROLES, ...workers.map(w => w.role).filter(Boolean)]))}
               uploadQualityPreset={uploadQualityPreset}
               isCollapsed={laborPhotosCollapsed}
               onCollapseChange={setLaborPhotosCollapsed}
@@ -2203,8 +2208,13 @@ function App() {
             <PhotoLedger
               photos={safetyPhotos}
               setPhotos={setSafetyPhotos}
+              workers={safetyWorkers}
+              attendance={safetyAttendance}
+              attendanceRole={safetyAttendanceRole}
+              year={projectInfo.year}
+              month={projectInfo.month}
               title="안전시설 인건비 증빙 사진"
-              categoryOptions={safetyWorkerRoles.length > 0 ? safetyWorkerRoles : WORKER_ROLES}
+              categoryOptions={Array.from(new Set([...WORKER_ROLES, ...safetyWorkers.map(w => w.role).filter(Boolean)]))}
               uploadQualityPreset={uploadQualityPreset}
               isCollapsed={safetyPhotosCollapsed}
               onCollapseChange={setSafetyPhotosCollapsed}
