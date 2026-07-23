@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Worker, PhotoEvidence, DailyAttendance, PHOTO_CATEGORIES, WORKER_ROLES, CompressionResult } from '../types';
-import { Calendar, ChevronLeft, ChevronRight, CheckCircle2, Circle, Camera, Plus, MapPin, ImagePlus, Edit3, User, Clock, Loader2, EyeOff, Eye } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, CheckCircle2, Circle, Camera, Plus, MapPin, ImagePlus, Edit3, User, Clock, Loader2, EyeOff, Eye, RotateCcw } from 'lucide-react';
 import { estimateMemoryUsage, optimizeImage, processInChunks } from '../utils/photoOptimization';
 import { ZoomableImage } from './ZoomableImage';
 
@@ -44,6 +44,8 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
   const [photoFilterCategory, setPhotoFilterCategory] = useState<string>('all');
   const workerFileInputRef = useRef<HTMLInputElement>(null);
   const [workerPhotoUploadTargetRole, setWorkerPhotoUploadTargetRole] = useState<string>('');
+  const [bulkUploadCategory, setBulkUploadCategory] = useState<string>('');
+  const bulkFileInputRef = useRef<HTMLInputElement>(null);
 
   // Sync selectedDate with global project month when it changes
   useEffect(() => {
@@ -437,6 +439,133 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
     setPhotos(prev => prev.filter(p => p.id !== id));
   };
 
+  const triggerBulkRolePhotoUpload = (role: string) => {
+    setBulkUploadCategory(role);
+    if (bulkFileInputRef.current) {
+      bulkFileInputRef.current.value = '';
+      bulkFileInputRef.current.click();
+    }
+  };
+
+  const handleBulkRolePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const targetRole = bulkUploadCategory || resolvedLaborCategories[0];
+    const files: File[] = Array.from(e.target.files);
+    
+    setIsProcessing(true);
+    try {
+      const [selY, selM] = selectedDate.split('-');
+      const y = Number(selY) || year;
+      const m = Number(selM) || month;
+      const daysInMonth = new Date(y, m, 0).getDate();
+      const activeDatesForRole: string[] = [];
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const dayAttendance = safeAttendance[dateStr] || {};
+        const isActive = safeWorkers.some(w => {
+          const gongsu = dayAttendance[w.id] || 0;
+          if (gongsu <= 0) return false;
+          const r = safeAttendanceRole[dateStr]?.[w.id] || w.role || '기타';
+          return r === targetRole;
+        });
+        if (isActive) {
+          activeDatesForRole.push(dateStr);
+        }
+      }
+
+      const targetDates = activeDatesForRole.length > 0 ? activeDatesForRole : [selectedDate];
+
+      const newPhotos: PhotoEvidence[] = [];
+      const results = await processInChunks(
+        files,
+        async (file) => {
+          try {
+            const { blob } = await optimizeImage(file, 1280, 1280, 0.68);
+            return { success: true, blob, file };
+          } catch (error) {
+            return { success: false, error, file };
+          }
+        },
+        5
+      );
+
+      results.forEach((res, idx) => {
+        if (res.success && res.blob) {
+          const assignedDate = targetDates[idx % targetDates.length];
+          newPhotos.push({
+            id: crypto.randomUUID(),
+            fileUrl: URL.createObjectURL(res.blob),
+            category: targetRole,
+            description: '',
+            location: '',
+            date: assignedDate,
+          });
+        }
+      });
+
+      if (newPhotos.length > 0) {
+        setPhotos(prev => [...prev, ...newPhotos]);
+        alert(`✅ [${targetRole}] 사진 ${newPhotos.length}장이 월간 출역일자(${targetDates.length}일)에 순차적으로 자동 배치되었습니다!`);
+      }
+    } catch (err) {
+      console.error("Bulk upload failed", err);
+      alert("일괄 사진 업로드 중 오류가 발생했습니다.");
+    } finally {
+      setIsProcessing(false);
+      e.target.value = '';
+    }
+  };
+
+  const autoMatchAllPhotosInDailyLog = () => {
+    if (!safeWorkers || safeWorkers.length === 0) {
+      alert("출역 기록 데이터가 없습니다.");
+      return;
+    }
+    const [selY, selM] = selectedDate.split('-');
+    const y = Number(selY) || year;
+    const m = Number(selM) || month;
+    const daysInMonth = new Date(y, m, 0).getDate();
+    
+    const activeSlotsByRole: Record<string, string[]> = {};
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const dayAttendance = safeAttendance[dateStr] || {};
+      const activeRoles = new Set<string>();
+      safeWorkers.forEach(w => {
+        const gongsu = dayAttendance[w.id] || 0;
+        if (gongsu > 0) {
+          const role = safeAttendanceRole[dateStr]?.[w.id] || w.role || '기타';
+          activeRoles.add(role);
+        }
+      });
+      activeRoles.forEach(r => {
+        if (!activeSlotsByRole[r]) activeSlotsByRole[r] = [];
+        activeSlotsByRole[r].push(dateStr);
+      });
+    }
+
+    let updatedCount = 0;
+    const updatedPhotos = [...safePhotos];
+
+    Object.entries(activeSlotsByRole).forEach(([role, activeDates]) => {
+      const rolePhotos = updatedPhotos.filter(p => p.category === role);
+      rolePhotos.forEach((photo, idx) => {
+        const targetDate = activeDates[idx % activeDates.length];
+        if (photo.date !== targetDate) {
+          const pIndex = updatedPhotos.findIndex(p => p.id === photo.id);
+          if (pIndex !== -1) {
+            updatedPhotos[pIndex] = { ...updatedPhotos[pIndex], date: targetDate };
+            updatedCount++;
+          }
+        }
+      });
+    });
+
+    setPhotos(updatedPhotos);
+    alert(`✅ 총 ${updatedCount}장의 사진이 세분화 직종별 출역일자에 맞춰 자동 매칭되었습니다.`);
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Date Navigator Widget */}
@@ -780,8 +909,68 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
 
         {/* Right: Photo Input */}
         <div className="space-y-6">
-        <div className="bg-white p-4 sm:p-8 rounded-3xl shadow-sm border border-slate-100 h-fit">
-           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          {/* Monthly Subdivided Role Bulk Photo Upload & Auto Match Card */}
+          <div className="bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 p-5 rounded-3xl border border-indigo-200 shadow-sm">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3 pb-3 border-b border-indigo-100">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-indigo-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">월간 일괄 기능</span>
+                  <h4 className="font-bold text-slate-800 text-sm">세분화 공종별 사진 일괄 업로드 & 출역일자 자동 매칭</h4>
+                </div>
+                <p className="text-xs text-slate-600 mt-1">
+                  사진을 세분화 공종별로 한번에 업로드하면, 해당 월의 일일 근로자 출역 기록에 맞춰 사진 날짜가 자동 매칭됩니다.
+                </p>
+              </div>
+              
+              <button
+                type="button"
+                onClick={autoMatchAllPhotosInDailyLog}
+                className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>월간 사진 전체 자동 매칭</span>
+              </button>
+            </div>
+
+            {/* Select Subdivided Role and Upload Bulk Photos */}
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-white p-3 rounded-2xl border border-indigo-100">
+              <div className="sm:col-span-5">
+                <label className="block text-[10px] font-bold text-slate-400 mb-1">대상 세분화 공종 선택</label>
+                <select
+                  value={bulkUploadCategory || resolvedLaborCategories[0]}
+                  onChange={(e) => setBulkUploadCategory(e.target.value)}
+                  className="w-full text-xs font-bold bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-indigo-900 outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  {resolvedLaborCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="sm:col-span-7 flex items-end">
+                <button
+                  type="button"
+                  onClick={() => triggerBulkRolePhotoUpload(bulkUploadCategory || resolvedLaborCategories[0])}
+                  className="w-full px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                >
+                  <ImagePlus className="w-4 h-4 text-indigo-400" />
+                  <span>[{bulkUploadCategory || resolvedLaborCategories[0]}] 사진 여러 장 한번에 일괄 업로드</span>
+                </button>
+                <input
+                  type="file"
+                  ref={bulkFileInputRef}
+                  className="hidden"
+                  accept="image/*"
+                  onChange={handleBulkRolePhotoUpload}
+                  disabled={isProcessing}
+                  multiple
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-4 sm:p-8 rounded-3xl shadow-sm border border-slate-100 h-fit">
+             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <h3 className="text-xl font-bold flex items-center gap-3 text-slate-800">
               <div className="bg-rose-100 p-2 rounded-xl text-rose-600">
                 <Camera className="w-5 h-5" />
