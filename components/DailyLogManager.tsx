@@ -47,17 +47,23 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
 
   // Sync selectedDate with global project month when it changes
   useEffect(() => {
+    const validYear = Number(year) || new Date().getFullYear();
+    const validMonth = Number(month) || (new Date().getMonth() + 1);
+    
+    if (!selectedDate || typeof selectedDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) {
+      setSelectedDate(`${validYear}-${String(validMonth).padStart(2, '0')}-01`);
+      return;
+    }
+
     const currentSelected = new Date(selectedDate);
-    // Note: getMonth() is 0-indexed, month prop is 1-indexed
-    if (currentSelected.getFullYear() !== year || (currentSelected.getMonth() + 1) !== month) {
-        // Default to the 1st day of the new report month
-        const newDate = `${year}-${String(month).padStart(2, '0')}-01`;
-        setSelectedDate(newDate);
+    if (isNaN(currentSelected.getTime()) || currentSelected.getFullYear() !== validYear || (currentSelected.getMonth() + 1) !== validMonth) {
+      setSelectedDate(`${validYear}-${String(validMonth).padStart(2, '0')}-01`);
     }
   }, [year, month]);
 
   const changeDate = (days: number) => {
     const current = new Date(selectedDate);
+    if (isNaN(current.getTime())) return;
     current.setDate(current.getDate() + days);
     const newDate = current.toISOString().split('T')[0];
     setSelectedDate(newDate);
@@ -65,22 +71,31 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
 
   // 캘린더 관련 헬퍼 함수
   const getDaysInMonth = (dateStr: string) => {
-    const [y, m] = dateStr.split('-').map(Number);
+    if (!dateStr || typeof dateStr !== 'string') return 30;
+    const parts = dateStr.split('-').map(Number);
+    const y = parts[0] || year || new Date().getFullYear();
+    const m = parts[1] || month || (new Date().getMonth() + 1);
     return new Date(y, m, 0).getDate();
   };
 
   const getFirstDayOfMonth = (dateStr: string) => {
-    const [y, m] = dateStr.split('-').map(Number);
+    if (!dateStr || typeof dateStr !== 'string') return 0;
+    const parts = dateStr.split('-').map(Number);
+    const y = parts[0] || year || new Date().getFullYear();
+    const m = parts[1] || month || (new Date().getMonth() + 1);
     return new Date(y, m - 1, 1).getDay();
   };
 
   const getCurrentMonthYear = () => {
-    const [y, m] = selectedDate.split('-').map(Number);
-    return { year: y, month: m };
+    if (!selectedDate || typeof selectedDate !== 'string') {
+      return { year: year || new Date().getFullYear(), month: month || (new Date().getMonth() + 1) };
+    }
+    const parts = selectedDate.split('-').map(Number);
+    return { year: parts[0] || year || new Date().getFullYear(), month: parts[1] || month || (new Date().getMonth() + 1) };
   };
 
   const changeMonth = (delta: number) => {
-    const [y, m] = selectedDate.split('-').map(Number);
+    const { year: y, month: m } = getCurrentMonthYear();
     let newMonth = m + delta;
     let newYear = y;
     
@@ -93,8 +108,9 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
     }
     
     const daysInNewMonth = new Date(newYear, newMonth, 0).getDate();
-    const currentDay = parseInt(selectedDate.split('-')[2]);
-    const newDay = Math.min(currentDay, daysInNewMonth);
+    const parts = (selectedDate || '').split('-');
+    const currentDay = parts[2] ? parseInt(parts[2], 10) : 1;
+    const newDay = Math.min(isNaN(currentDay) ? 1 : currentDay, daysInNewMonth);
     
     const newDate = `${newYear}-${String(newMonth).padStart(2, '0')}-${String(newDay).padStart(2, '0')}`;
     setSelectedDate(newDate);
@@ -107,7 +123,7 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
   };
 
   const renderCalendar = () => {
-    const [y, m] = selectedDate.split('-').map(Number);
+    const { year: y, month: m } = getCurrentMonthYear();
     const daysInMonth = getDaysInMonth(selectedDate);
     const firstDayOfMonth = getFirstDayOfMonth(selectedDate);
     const days = [];
@@ -127,8 +143,10 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
   };
 
   const updateAttendance = (workerId: string, gongsu: number) => {
+    if (!workerId || !selectedDate || !setAttendance) return;
     setAttendance(prevAttendance => {
-      const dayAttendance = { ...(prevAttendance[selectedDate] || {}) };
+      const current = prevAttendance || {};
+      const dayAttendance = { ...(current[selectedDate] || {}) };
       
       if (gongsu === 0) {
         delete dayAttendance[workerId];
@@ -137,16 +155,17 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
       }
 
       return {
-        ...prevAttendance,
+        ...current,
         [selectedDate]: dayAttendance
       };
     });
   };
 
   const updateSafetyAttendance = (workerId: string, gongsu: number) => {
-    if (!setSafetyAttendance) return;
+    if (!workerId || !selectedDate || !setSafetyAttendance) return;
     setSafetyAttendance(prevAttendance => {
-      const dayAttendance = { ...(prevAttendance[selectedDate] || {}) };
+      const current = prevAttendance || {};
+      const dayAttendance = { ...(current[selectedDate] || {}) };
       
       if (gongsu === 0) {
         delete dayAttendance[workerId];
@@ -155,21 +174,24 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
       }
 
       return {
-        ...prevAttendance,
+        ...current,
         [selectedDate]: dayAttendance
       };
     });
   };
 
   const handleRoleChange = (workerId: string, newRole: string) => {
-    if (!setAttendanceRole) return;
-    setAttendanceRole(prev => ({
-      ...prev,
-      [selectedDate]: {
-        ...(prev[selectedDate] || {}),
-        [workerId]: newRole
-      }
-    }));
+    if (!workerId || !selectedDate || !setAttendanceRole) return;
+    setAttendanceRole(prev => {
+      const current = prev || {};
+      return {
+        ...current,
+        [selectedDate]: {
+          ...(current[selectedDate] || {}),
+          [workerId]: newRole
+        }
+      };
+    });
   };
 
   // Safe state accessors to prevent crashes from uninitialized or old restored backup data
