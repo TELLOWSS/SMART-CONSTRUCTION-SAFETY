@@ -274,11 +274,14 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
     return acc;
   }, {} as Record<string, { count: number; gongsu: number }>);
 
-  if (safetyWorkers.length > 0) {
-    safetyWorkers.forEach(worker => {
-      const gongsu = safetyAttendance[selectedDate]?.[worker.id] || 0;
+  if (safeSafetyWorkers.length > 0) {
+    safeSafetyWorkers.forEach(worker => {
+      if (!worker || !worker.id) return;
+      const gongsu = (safeSafetyAttendance && selectedDate && safeSafetyAttendance[selectedDate]) ? (safeSafetyAttendance[selectedDate][worker.id] || 0) : 0;
       if (gongsu > 0) {
-        const role = worker.role || '안전시설';
+        const role = (safeSafetyAttendanceRole && selectedDate && safeSafetyAttendanceRole[selectedDate] && safeSafetyAttendanceRole[selectedDate][worker.id])
+          ? safeSafetyAttendanceRole[selectedDate][worker.id]
+          : (worker.role || '안전시설');
         if (!todaysRoleBreakdown[role]) {
           todaysRoleBreakdown[role] = { count: 0, gongsu: 0 };
         }

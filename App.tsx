@@ -5,6 +5,7 @@ import { LaborCostTable } from './components/LaborCostTable';
 import { SafetyCostTable } from './components/SafetyCostTable';
 import { PhotoLedger } from './components/PhotoLedger';
 import { DailyLogManager } from './components/DailyLogManager';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { RestoreOptionsModal, RestoreSelections, RestoreSummary } from './components/RestoreOptionsModal';
 import { ProjectInfo, Worker, PhotoEvidence, DailyAttendance, SafetyItem, WORKER_ROLES } from './types';
 import { Printer, Layout, FileText, ShieldCheck, CalendarCheck, HelpCircle, BarChart3, ChevronRight, ChevronUp, Clock, Download, Upload, RotateCcw, ShoppingCart, Loader2, Save, FilePlus, ArrowLeftRight, Trash2, Lock, LockOpen } from 'lucide-react';
@@ -2232,23 +2233,29 @@ function App() {
 
         {/* Daily Input Tab */}
         {activeTab === 'daily' && (
-          <DailyLogManager 
-            workers={workers}
-            attendance={attendance}
-            setAttendance={setAttendance}
-            photos={laborPhotos}
-            setPhotos={setLaborPhotos}
-            safetyPhotos={safetyPhotos}
-            setSafetyPhotos={setSafetyPhotos}
-            year={projectInfo.year}
-            month={projectInfo.month}
-            safetyWorkers={safetyWorkers}
-            safetyAttendance={safetyAttendance}
-            setSafetyAttendance={setSafetyAttendance}
-            uploadQualityPreset={uploadQualityPreset}
-            laborCategoryOptions={laborWorkerRoles.length > 0 ? laborWorkerRoles : WORKER_ROLES}
-            safetyCategoryOptions={safetyWorkerRoles.length > 0 ? safetyWorkerRoles : WORKER_ROLES}
-          />
+          <ErrorBoundary fallbackTitle="일일관리 탭을 불러오는 중 문제가 발생했습니다.">
+            <DailyLogManager 
+              workers={workers}
+              attendance={attendance}
+              setAttendance={setAttendance}
+              attendanceRole={attendanceRole}
+              setAttendanceRole={setAttendanceRole}
+              photos={laborPhotos}
+              setPhotos={setLaborPhotos}
+              safetyPhotos={safetyPhotos}
+              setSafetyPhotos={setSafetyPhotos}
+              year={projectInfo.year}
+              month={projectInfo.month}
+              safetyWorkers={safetyWorkers}
+              safetyAttendance={safetyAttendance}
+              setSafetyAttendance={setSafetyAttendance}
+              safetyAttendanceRole={safetyAttendanceRole}
+              setSafetyAttendanceRole={setSafetyAttendanceRole}
+              uploadQualityPreset={uploadQualityPreset}
+              laborCategoryOptions={Array.from(new Set([...WORKER_ROLES, ...workers.map(w => w.role).filter(Boolean)]))}
+              safetyCategoryOptions={Array.from(new Set([...WORKER_ROLES, ...safetyWorkers.map(w => w.role).filter(Boolean)]))}
+            />
+          </ErrorBoundary>
         )}
 
         {/* Guide Tab */}
