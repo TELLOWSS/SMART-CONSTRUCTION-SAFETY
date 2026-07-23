@@ -206,6 +206,7 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
     }, {} as Record<string, { role: string; workerCount: number; gongsu: number; cost: number }>);
 
     const roleSummaries = Object.values(roleSummaryMap).sort((a, b) => b.cost - a.cost);
+    const uniqueRolesInReport = Array.from(new Set(reportWorkers.map(w => w.role || '기타')));
 
     return (
       <div className="mb-8 break-inside-avoid">
@@ -345,6 +346,98 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
                   {Array.from({ length: 31 - daysInMonth }).map((_, i) => (
                     <div key={`empty-active-count-${i}`} className="border-r border-slate-200 bg-slate-100/50 last:border-r-0"></div>
                   ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Daily Breakdown by Subdivided Role Matrix Table (1일~31일 일자별 세분화 항목별 투입 현황 표) */}
+          {reportWorkers.length > 0 && uniqueRolesInReport.length > 0 && (
+            <div className="border-2 border-slate-700 bg-white text-[10px] break-inside-avoid my-4 rounded-sm overflow-hidden">
+              <div className="bg-slate-800 text-white p-2 font-bold flex flex-wrap justify-between items-center text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 bg-amber-400 rounded-full inline-block"></span>
+                  <span>일자별 세분화 항목(직종)별 투입 공수 현황표</span>
+                </div>
+                <span className="text-slate-300 text-[11px] font-normal">단위: 공수 (1일 ~ 31일)</span>
+              </div>
+
+              {/* Table Header: Item Name | Days 1..31 | Total */}
+              <div className="flex bg-slate-200 border-b border-slate-400 font-bold text-center">
+                <div className="w-28 shrink-0 border-r border-slate-300 p-1 flex items-center justify-center text-slate-800 text-[10px]">
+                  세분화 항목 (직종)
+                </div>
+                <div className="flex-1 grid grid-cols-[repeat(31,minmax(0,1fr))] text-center">
+                  {daysArray.map(day => (
+                    <div key={day} className="border-r border-slate-300 last:border-r-0 p-0.5 text-[7px] text-slate-700 flex items-center justify-center font-bold">
+                      {day}
+                    </div>
+                  ))}
+                  {Array.from({ length: 31 - daysInMonth }).map((_, i) => (
+                    <div key={`empty-[header]-${i}`} className="border-r border-slate-300 bg-slate-100/50 last:border-r-0"></div>
+                  ))}
+                </div>
+                <div className="w-14 shrink-0 border-l border-slate-300 p-1 flex items-center justify-center text-indigo-900 text-[10px] font-extrabold bg-slate-200">
+                  월합계
+                </div>
+              </div>
+
+              {/* Table Rows: One row per unique role */}
+              {uniqueRolesInReport.map((role) => {
+                const roleWorkers = reportWorkers.filter(w => (w.role || '기타') === role);
+                const roleMonthlyTotal = daysArray.reduce((acc, day) => {
+                  return acc + roleWorkers.reduce((sum, w) => sum + (getDailyValue(w.id, day) || 0), 0);
+                }, 0);
+
+                return (
+                  <div key={role} className="flex border-b border-slate-200 last:border-b-0 text-center items-center hover:bg-slate-50">
+                    <div className="w-28 shrink-0 border-r border-slate-300 p-1 font-bold text-slate-800 text-left pl-2 truncate text-[9.5px]" title={role}>
+                      {role}
+                    </div>
+                    <div className="flex-1 grid grid-cols-[repeat(31,minmax(0,1fr))] text-center">
+                      {daysArray.map(day => {
+                        const dailySum = roleWorkers.reduce((sum, w) => sum + (getDailyValue(w.id, day) || 0), 0);
+                        return (
+                          <div key={day} className="border-r border-slate-200 last:border-r-0 h-5 flex items-center justify-center">
+                            <span className={`text-[8.5px] font-bold tracking-tighter ${dailySum > 0 ? 'text-indigo-900 font-extrabold' : 'text-slate-300'}`}>
+                              {dailySum ? (dailySum % 1 === 0 ? String(dailySum) : dailySum.toFixed(1)) : '-'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {Array.from({ length: 31 - daysInMonth }).map((_, i) => (
+                        <div key={`empty-role-${role}-${i}`} className="border-r border-slate-200 bg-slate-100/50 last:border-r-0"></div>
+                      ))}
+                    </div>
+                    <div className="w-14 shrink-0 border-l border-slate-300 p-1 font-extrabold text-indigo-900 text-[10px] bg-slate-50">
+                      {roleMonthlyTotal % 1 === 0 ? roleMonthlyTotal : roleMonthlyTotal.toFixed(1)}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Table Footer: Daily Total Row */}
+              <div className="flex bg-slate-800 text-white font-bold text-center border-t-2 border-slate-600">
+                <div className="w-28 shrink-0 border-r border-slate-600 p-1 text-center text-[10px]">
+                  일별 합계 (공수)
+                </div>
+                <div className="flex-1 grid grid-cols-[repeat(31,minmax(0,1fr))] text-center">
+                  {daysArray.map(day => {
+                    const dailyGongsuSum = reportWorkers.reduce((sum, w) => sum + (getDailyValue(w.id, day) || 0), 0);
+                    return (
+                      <div key={day} className="border-r border-slate-600 last:border-r-0 h-5 flex items-center justify-center">
+                        <span className={`text-[8.5px] font-bold tracking-tighter ${dailyGongsuSum > 0 ? 'text-amber-300 font-black' : 'text-slate-400'}`}>
+                          {dailyGongsuSum ? (dailyGongsuSum % 1 === 0 ? String(dailyGongsuSum) : dailyGongsuSum.toFixed(1)) : '-'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {Array.from({ length: 31 - daysInMonth }).map((_, i) => (
+                    <div key={`empty-daily-matrix-sum-${i}`} className="border-r border-slate-600 bg-slate-900/50 last:border-r-0"></div>
+                  ))}
+                </div>
+                <div className="w-14 shrink-0 border-l border-slate-600 p-1 text-emerald-300 text-[10px] font-black bg-slate-900">
+                  {monthlyTotalGongsu % 1 === 0 ? monthlyTotalGongsu : monthlyTotalGongsu.toFixed(1)}
                 </div>
               </div>
             </div>
