@@ -158,6 +158,30 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
   const todaysSafetyPhotos = safetyPhotos.filter(p => p.date === selectedDate);
   const resolvedLaborCategories = (laborCategoryOptions && laborCategoryOptions.length > 0 ? laborCategoryOptions : WORKER_ROLES);
   const resolvedSafetyCategories = (safetyCategoryOptions && safetyCategoryOptions.length > 0 ? safetyCategoryOptions : PHOTO_CATEGORIES);
+
+  // Real-time daily & monthly attendance statistics
+  const todaysLaborGongsu = workers.reduce((sum, w) => sum + (attendance[selectedDate]?.[w.id] || 0), 0);
+  const todaysLaborWorkersCount = workers.filter(w => (attendance[selectedDate]?.[w.id] || 0) > 0).length;
+
+  const todaysSafetyGongsu = safetyWorkers.reduce((sum, w) => sum + (safetyAttendance[selectedDate]?.[w.id] || 0), 0);
+  const todaysSafetyWorkersCount = safetyWorkers.filter(w => (safetyAttendance[selectedDate]?.[w.id] || 0) > 0).length;
+
+  const [selYearStr, selMonthStr] = selectedDate.split('-');
+  const selYearNum = Number(selYearStr || year);
+  const selMonthNum = Number(selMonthStr || month);
+  const daysInSelMonth = new Date(selYearNum, selMonthNum, 0).getDate();
+
+  const monthlyLaborGongsu = Array.from({ length: daysInSelMonth }, (_, i) => i + 1).reduce((sum, day) => {
+    const dateStr = `${selYearStr}-${selMonthStr}-${String(day).padStart(2, '0')}`;
+    const dayAttendance = attendance[dateStr] || {};
+    return sum + Object.values(dayAttendance).reduce((s, v) => s + v, 0);
+  }, 0);
+
+  const monthlySafetyGongsu = Array.from({ length: daysInSelMonth }, (_, i) => i + 1).reduce((sum, day) => {
+    const dateStr = `${selYearStr}-${selMonthStr}-${String(day).padStart(2, '0')}`;
+    const dayAttendance = safetyAttendance[dateStr] || {};
+    return sum + Object.values(dayAttendance).reduce((s, v) => s + v, 0);
+  }, 0);
   
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'labor' | 'safety' = 'labor') => {
     if (e.target.files && e.target.files.length > 0) {
@@ -428,6 +452,30 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
               {hideZeroAttendance ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
               {hideZeroAttendance ? '전체보기' : '출역만'}
             </button>
+          </div>
+          
+          {/* Real-time Daily & Monthly Attendance Stats Banner */}
+          <div className="mb-6 p-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-md">
+            <div className="flex items-center gap-3">
+              <div className="bg-emerald-500/20 text-emerald-400 p-2.5 rounded-xl border border-emerald-500/30">
+                <User className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-[11px] text-slate-300 font-medium">{selectedDate} 금일 출역 집계</div>
+                <div className="text-sm font-bold flex flex-wrap items-center gap-2 mt-0.5">
+                  <span>금일 출역 인원: <strong className="text-emerald-400 text-base">{todaysLaborWorkersCount + (safetyWorkers.length > 0 ? todaysSafetyWorkersCount : 0)}</strong> 명</span>
+                  <span className="text-slate-500">|</span>
+                  <span>금일 투입 공수: <strong className="text-amber-300 text-base">{(todaysLaborGongsu + todaysSafetyGongsu) % 1 === 0 ? (todaysLaborGongsu + todaysSafetyGongsu) : (todaysLaborGongsu + todaysSafetyGongsu).toFixed(1)}</strong> 공수</span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="text-xs text-right bg-white/10 px-3.5 py-2 rounded-xl backdrop-blur-sm border border-white/10 flex items-center gap-3">
+              <div>
+                <span className="text-slate-300 block text-[10px]">{selMonthNum}월 총 누계 공수</span>
+                <span className="font-bold text-indigo-200 text-sm">{(monthlyLaborGongsu + monthlySafetyGongsu) % 1 === 0 ? (monthlyLaborGongsu + monthlySafetyGongsu) : (monthlyLaborGongsu + monthlySafetyGongsu).toFixed(1)} 공수</span>
+              </div>
+            </div>
           </div>
           
           <div className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-3">유도원 및 감시자 인건비</div>
