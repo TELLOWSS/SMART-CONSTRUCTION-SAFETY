@@ -303,68 +303,7 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
              </div>
           )}
 
-          {/* Daily Cumulative Worker Count & Gongsu Summary (일자별 투입 인원 및 공수 누계 현황) */}
-          {reportWorkers.length > 0 && (
-            <div className="border-2 border-slate-700 bg-slate-50 text-[10px] break-inside-avoid rounded-sm overflow-hidden my-4">
-              <div className="bg-slate-800 text-white p-2 font-bold flex flex-wrap justify-between items-center text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-emerald-400 rounded-full inline-block"></span>
-                  <span>일자별 투입 총인원(공수) 누계 현황</span>
-                </div>
-                <div className="flex items-center gap-4 text-xs font-normal">
-                  <span>총 누계 출역인원: <strong className="text-amber-300 font-bold">{monthlyTotalPersonDays}</strong> 명/일</span>
-                  <span>총 누계 공수: <strong className="text-emerald-300 font-bold">{monthlyTotalGongsu % 1 === 0 ? monthlyTotalGongsu : monthlyTotalGongsu.toFixed(1)}</strong> 공수</span>
-                </div>
-              </div>
 
-              {/* 1-31 Days Daily Total Gongsu Row */}
-              <div className="flex border-b border-slate-300">
-                <div className="w-16 shrink-0 border-r border-slate-300 p-1 flex flex-col items-center justify-center bg-slate-200 font-bold text-center leading-tight">
-                  <span>일자별</span>
-                  <span className="text-[9px] text-indigo-900 font-extrabold">총공수</span>
-                </div>
-                <div className="flex-1 grid grid-cols-[repeat(31,minmax(0,1fr))] text-center">
-                  {daysArray.map(day => {
-                    const dailyGongsuSum = reportWorkers.reduce((sum, w) => sum + (getDailyValue(w.id, day) || 0), 0);
-                    return (
-                      <div key={day} className="border-r border-slate-300 last:border-r-0">
-                        <div className="bg-slate-200 border-b border-slate-300 text-[7px] h-4 flex items-center justify-center text-slate-600 font-bold">{day}</div>
-                        <div className={`h-6 flex items-center justify-center font-bold text-[9px] tracking-tighter ${dailyGongsuSum > 0 ? 'bg-amber-100 text-indigo-950 font-black' : 'text-slate-400'}`}>
-                          {dailyGongsuSum ? (dailyGongsuSum % 1 === 0 ? String(dailyGongsuSum) : dailyGongsuSum.toFixed(1)) : '-'}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {Array.from({ length: 31 - daysInMonth }).map((_, i) => (
-                    <div key={`empty-daily-sum-${i}`} className="border-r border-slate-300 bg-slate-100/50 last:border-r-0"></div>
-                  ))}
-                </div>
-              </div>
-
-              {/* 1-31 Days Active Workers Count Row */}
-              <div className="flex">
-                <div className="w-16 shrink-0 border-r border-slate-300 p-1 flex flex-col items-center justify-center bg-slate-100 font-bold text-center leading-tight text-slate-700">
-                  <span>일자별</span>
-                  <span className="text-[9px] text-emerald-800 font-extrabold">출역인원</span>
-                </div>
-                <div className="flex-1 grid grid-cols-[repeat(31,minmax(0,1fr))] text-center">
-                  {daysArray.map(day => {
-                    const activeWorkersCount = reportWorkers.filter(w => (getDailyValue(w.id, day) || 0) > 0).length;
-                    return (
-                      <div key={day} className="border-r border-slate-200 last:border-r-0">
-                        <div className={`h-5 flex items-center justify-center font-bold text-[8.5px] ${activeWorkersCount > 0 ? 'text-emerald-800 bg-emerald-50/60 font-bold' : 'text-slate-300'}`}>
-                          {activeWorkersCount > 0 ? `${activeWorkersCount}명` : '-'}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {Array.from({ length: 31 - daysInMonth }).map((_, i) => (
-                    <div key={`empty-active-count-${i}`} className="border-r border-slate-200 bg-slate-100/50 last:border-r-0"></div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Daily Breakdown by Subdivided Role Matrix Table (1일~31일 일자별 세분화 항목별 투입 현황 표) */}
           {reportWorkers.length > 0 && uniqueRolesInReport.length > 0 && (
