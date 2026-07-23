@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { PhotoEvidence, PHOTO_CATEGORIES, CompressionResult, Worker, DailyAttendance, DailyAttendanceRole } from '../types';
-import { ImagePlus, MapPin, Calendar, X, Camera, Loader2, ChevronDown, ChevronUp, RotateCcw, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ImagePlus, MapPin, Calendar, X, Camera, Loader2, ChevronDown, ChevronUp, RotateCcw, CheckCircle2, AlertCircle, Filter, Edit3 } from 'lucide-react';
 import { estimateMemoryUsage, optimizeImage, processInChunks } from '../utils/photoOptimization';
 import { ZoomableImage } from './ZoomableImage';
 
@@ -39,6 +39,7 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, workers, atten
   const [bulkCategory, setBulkCategory] = useState<string>('');
   const [bulkDescription, setBulkDescription] = useState<string>('');
   const [bulkDate, setBulkDate] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'editing'>('all');
 
   const [slotTarget, setSlotTarget] = useState<{ date: string; role: string } | null>(null);
   const slotFileInputRef = useRef<HTMLInputElement>(null);
@@ -69,6 +70,7 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, workers, atten
         description: '',
         location: '',
         orientation,
+        status: 'completed',
       };
       setPhotos(prev => [...prev, newPhoto]);
     } catch (err) {
@@ -273,6 +275,7 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, workers, atten
             location: '',
             date: new Date(Date.now() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0],
             orientation,
+            status: 'completed',
           });
         }
 
@@ -357,6 +360,15 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, workers, atten
         ...(hasDate ? { date: bulkDate } : {}),
       };
     }));
+    setSelectedPhotoIds([]);
+  };
+
+  const applyBulkStatusChange = (status: 'completed' | 'editing') => {
+    if (selectedPhotoIds.length === 0) {
+      alert('상태를 변경할 사진을 먼저 선택하세요.');
+      return;
+    }
+    setPhotos(prev => prev.map(photo => selectedPhotoIds.includes(photo.id) ? { ...photo, status } : photo));
     setSelectedPhotoIds([]);
   };
 
@@ -542,34 +554,61 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, workers, atten
 
             return (
               <div className="space-y-3">
-                <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                  <span>📋 세분화 공종별 출역 현황 & 증빙 사진 매칭 상태</span>
+                <div className="text-xs font-bold text-slate-700 flex items-center justify-between gap-1.5">
+                  <span>📋 세분화 공종별 출역 현황 & 증빙 사진 매칭/검토 상태</span>
+                  <span className="text-[11px] font-normal text-slate-500">
+                    🟢 완료 / 🟠 수정필요 / 🔴 부족
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {roleEntries.map(([role, activeDates]) => {
                     const rolePhotos = photos.filter(p => p.category === role);
                     const isMatched = rolePhotos.length >= activeDates.length;
+                    const roleEditingCount = rolePhotos.filter(p => p.status === 'editing').length;
+                    const roleCompletedCount = rolePhotos.filter(p => (p.status || 'completed') === 'completed').length;
 
                     return (
                       <div key={role} className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
                         <div className="flex items-center justify-between gap-2 mb-2">
                           <span className="font-bold text-slate-800 text-xs truncate" title={role}>{role}</span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isMatched ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-rose-100 text-rose-800 border border-rose-200'}`}>
-                            {isMatched ? `🟢 매칭 완료 (${rolePhotos.length}/${activeDates.length}일)` : `🔴 ${activeDates.length - rolePhotos.length}장 부족 (${rolePhotos.length}/${activeDates.length}일)`}
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            !isMatched 
+                              ? 'bg-rose-100 text-rose-800 border border-rose-200' 
+                              : roleEditingCount > 0 
+                                ? 'bg-amber-100 text-amber-800 border border-amber-200' 
+                                : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          }`}>
+                            {!isMatched 
+                              ? `🔴 ${activeDates.length - rolePhotos.length}장 부족 (${rolePhotos.length}/${activeDates.length}일)` 
+                              : roleEditingCount > 0 
+                                ? `🟠 수정필요 ${roleEditingCount}건 (${roleCompletedCount}건 완료)` 
+                                : `🟢 검토완료 (${rolePhotos.length}/${activeDates.length}일)`}
                           </span>
                         </div>
 
                         <div className="flex flex-wrap gap-1.5 mt-2">
                           {activeDates.map(dateStr => {
-                            const hasPhoto = photos.some(p => p.category === role && p.date === dateStr);
+                            const slotPhoto = photos.find(p => p.category === role && p.date === dateStr);
+                            const hasPhoto = !!slotPhoto;
+                            const isEditing = slotPhoto?.status === 'editing';
                             const dayNum = parseInt(dateStr.split('-')[2], 10);
 
                             return (
-                              <div key={dateStr} className={`text-[10px] px-2 py-1 rounded-lg border flex items-center gap-1 ${hasPhoto ? 'bg-indigo-50 text-indigo-900 border-indigo-200 font-bold' : 'bg-slate-50 text-slate-400 border-slate-200 font-normal'}`}>
+                              <div key={dateStr} className={`text-[10px] px-2 py-1 rounded-lg border flex items-center gap-1 ${
+                                !hasPhoto 
+                                  ? 'bg-slate-50 text-slate-400 border-slate-200 font-normal' 
+                                  : isEditing
+                                    ? 'bg-amber-50 text-amber-900 border-amber-300 font-bold'
+                                    : 'bg-indigo-50 text-indigo-900 border-indigo-200 font-bold'
+                              }`}>
                                 <span>{dayNum}일</span>
                                 {hasPhoto ? (
-                                  <CheckCircle2 className="w-3 h-3 text-indigo-600" />
+                                  isEditing ? (
+                                    <AlertCircle className="w-3 h-3 text-amber-600" title="수정 필요/수정중" />
+                                  ) : (
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" title="검토 완료" />
+                                  )
                                 ) : (
                                   <button
                                     type="button"
@@ -593,6 +632,67 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, workers, atten
           })()}
         </div>
       )}
+
+      {!sectionCollapsed && photos.length > 0 && (() => {
+        const totalPhotoCount = photos.length;
+        const completedPhotoCount = photos.filter(p => (p.status || 'completed') === 'completed').length;
+        const editingPhotoCount = photos.filter(p => p.status === 'editing').length;
+        const completionPercentage = totalPhotoCount > 0 ? Math.round((completedPhotoCount / totalPhotoCount) * 100) : 0;
+
+        return (
+          <div className="mx-8 mb-4 p-4 bg-gradient-to-r from-slate-50 via-indigo-50/40 to-slate-50 border border-slate-200 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xs">
+            <div className="flex flex-col flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                <span className="text-xs font-extrabold text-slate-800">📸 사진 세부항목별 업로드 & 검토 상태:</span>
+                <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                  🟢 완료 {completedPhotoCount}건
+                </span>
+                {editingPhotoCount > 0 && (
+                  <span className="text-xs font-bold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-200">
+                    🟠 수정필요/수정중 {editingPhotoCount}건
+                  </span>
+                )}
+                <span className="text-xs font-bold text-slate-500 ml-auto">
+                  완료율: {completionPercentage}%
+                </span>
+              </div>
+              <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                <div 
+                  className="bg-emerald-500 h-2 rounded-full transition-all duration-500" 
+                  style={{ width: `${completionPercentage}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs shrink-0 self-start md:self-auto">
+              <span className="text-[11px] font-bold text-slate-400 px-2 flex items-center gap-1">
+                <Filter className="w-3.5 h-3.5 text-slate-500" /> 필터:
+              </span>
+              <button
+                type="button"
+                onClick={() => setStatusFilter('all')}
+                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${statusFilter === 'all' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+              >
+                전체 ({totalPhotoCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter('completed')}
+                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${statusFilter === 'completed' ? 'bg-emerald-600 text-white' : 'text-emerald-700 hover:bg-emerald-50'}`}
+              >
+                🟢 완료 ({completedPhotoCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter('editing')}
+                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${statusFilter === 'editing' ? 'bg-amber-500 text-white' : 'text-amber-700 hover:bg-amber-50'}`}
+              >
+                🟠 수정필요 ({editingPhotoCount})
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {!sectionCollapsed && photos.length > 0 && (
         <div className="px-8 pb-4 flex flex-col gap-3 border-b border-slate-100">
@@ -658,131 +758,214 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, workers, atten
 
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+          <div className="flex flex-wrap items-center gap-2 pt-1">
             <button
               type="button"
               onClick={applyBulkMetaChange}
-              className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               disabled={selectedPhotoIds.length === 0}
             >
-              선택 항목에 적용
+              선택 항목 내용 적용
+            </button>
+            <button
+              type="button"
+              onClick={() => applyBulkStatusChange('completed')}
+              className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
+              disabled={selectedPhotoIds.length === 0}
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              선택 항목 완료 처리
+            </button>
+            <button
+              type="button"
+              onClick={() => applyBulkStatusChange('editing')}
+              className="px-4 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
+              disabled={selectedPhotoIds.length === 0}
+            >
+              <AlertCircle className="w-4 h-4" />
+              선택 항목 수정 상태 변경
             </button>
           </div>
         </div>
       )}
 
-      {!sectionCollapsed && (
-      <div className="px-8 pb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {photos.map((photo) => (
-          <div key={photo.id} className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group">
-            <div className="aspect-video w-full bg-slate-100 relative border-b border-slate-100 overflow-hidden">
-              <ZoomableImage src={photo.fileUrl} alt="preview" />
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none" />
-              <label className="absolute top-2 left-2 bg-white/90 backdrop-blur-sm rounded-full p-1.5 shadow-md border border-slate-200 opacity-0 group-hover:opacity-100 transition-all cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selectedPhotoIds.includes(photo.id)}
-                  onChange={() => togglePhotoSelection(photo.id)}
-                  className="h-4 w-4 accent-indigo-600 cursor-pointer"
-                  aria-label="사진 선택"
-                />
-              </label>
-              <button
-                onClick={() => removePhoto(photo.id)}
-                className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-red-600 transform hover:scale-110 active:scale-90"
-                title="사진 삭제"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            
-            <div className="p-5 space-y-4">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 mb-1.5 uppercase tracking-wide">사진 구분 (공종)</label>
-                <div className="relative">
-                    <select
-                    value={photo.category}
-                    onChange={(e) => updatePhoto(photo.id, 'category', e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all cursor-pointer font-medium text-slate-700 appearance-none"
-                    >
-                    {availableCategories.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                    </select>
-                     <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
-                        <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+      {!sectionCollapsed && (() => {
+        const displayedPhotos = photos.filter(photo => {
+          const currentStatus = photo.status || 'completed';
+          if (statusFilter === 'completed') return currentStatus === 'completed';
+          if (statusFilter === 'editing') return currentStatus === 'editing';
+          return true;
+        });
+
+        return (
+          <div className="px-8 pb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {displayedPhotos.map((photo) => {
+              const isEditing = photo.status === 'editing';
+
+              return (
+                <div key={photo.id} className={`border rounded-2xl overflow-hidden bg-white shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group ${
+                  isEditing ? 'border-amber-300 ring-2 ring-amber-200/60' : 'border-slate-200'
+                }`}>
+                  <div className="aspect-video w-full bg-slate-100 relative border-b border-slate-100 overflow-hidden">
+                    <ZoomableImage src={photo.fileUrl} alt="preview" />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none" />
+                    
+                    {/* Status Badge Tag */}
+                    <div className={`absolute top-2 left-2 px-2.5 py-1 rounded-full backdrop-blur-md shadow-md border text-xs font-extrabold flex items-center gap-1 z-10 ${
+                      !isEditing
+                        ? 'bg-emerald-600/90 text-white border-emerald-400'
+                        : 'bg-amber-500/90 text-white border-amber-400 animate-pulse'
+                    }`}>
+                      {!isEditing ? (
+                        <>
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>완료</span>
+                        </>
+                      ) : (
+                        <>
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>수정필요</span>
+                        </>
+                      )}
                     </div>
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 mb-1.5 uppercase tracking-wide">작업 상세 내용</label>
-                <input
-                  type="text"
-                  value={photo.description}
-                  onChange={(e) => updatePhoto(photo.id, 'description', e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all bg-slate-50 focus:bg-white placeholder-slate-400"
-                  placeholder="예: 101동 1층 계단 안전난간 보수 완료"
-                />
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                   <label className="text-[10px] font-bold text-slate-400 mb-1.5 flex items-center gap-1 uppercase tracking-wide">
-                     <MapPin className="w-3 h-3" /> 작업 위치
-                   </label>
-                   <input
-                    type="text"
-                    value={photo.location}
-                    onChange={(e) => updatePhoto(photo.id, 'location', e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs focus:border-indigo-500 outline-none bg-slate-50 focus:bg-white"
-                    placeholder="예: 101동"
-                  />
-                </div>
-                <div>
-                   <label className="text-[10px] font-bold text-slate-400 mb-1.5 flex items-center gap-1 uppercase tracking-wide">
-                     <Calendar className="w-3 h-3" /> 촬영 일자
-                   </label>
-                   <input
-                    type="date"
-                    value={photo.date}
-                    onChange={(e) => updatePhoto(photo.id, 'date', e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs focus:border-indigo-500 outline-none bg-slate-50 focus:bg-white text-slate-600"
-                  />
-                </div>
-              </div>
+                    <label className="absolute top-2 right-12 bg-white/90 backdrop-blur-sm rounded-full p-1.5 shadow-md border border-slate-200 opacity-0 group-hover:opacity-100 transition-all cursor-pointer z-10">
+                      <input
+                        type="checkbox"
+                        checked={selectedPhotoIds.includes(photo.id)}
+                        onChange={() => togglePhotoSelection(photo.id)}
+                        className="h-4 w-4 accent-indigo-600 cursor-pointer"
+                        aria-label="사진 선택"
+                      />
+                    </label>
+                    <button
+                      onClick={() => removePhoto(photo.id)}
+                      className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-red-600 transform hover:scale-110 active:scale-90 z-10"
+                      title="사진 삭제"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  
+                  <div className="p-5 space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-1.5 uppercase tracking-wide">사진 구분 (공종)</label>
+                      <div className="relative">
+                          <select
+                          value={photo.category}
+                          onChange={(e) => updatePhoto(photo.id, 'category', e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all cursor-pointer font-medium text-slate-700 appearance-none"
+                          >
+                          {availableCategories.map(cat => (
+                              <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                          </select>
+                           <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                              <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                          </div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-1.5 uppercase tracking-wide">작업 상세 내용</label>
+                      <input
+                        type="text"
+                        value={photo.description}
+                        onChange={(e) => updatePhoto(photo.id, 'description', e.target.value)}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all bg-slate-50 focus:bg-white placeholder-slate-400"
+                        placeholder="예: 101동 1층 계단 안전난간 보수 완료"
+                      />
+                    </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 mb-1.5 uppercase tracking-wide">출력 크롭 위치</label>
-                <div className="relative">
-                  <select
-                    value={photo.cropPosition || 'center'}
-                    onChange={(e) => updatePhoto(photo.id, 'cropPosition', e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all cursor-pointer font-medium text-slate-700 appearance-none"
-                  >
-                    <option value="top">상단 우선</option>
-                    <option value="center">중앙 기준</option>
-                    <option value="bottom">하단 우선</option>
-                  </select>
-                  <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
-                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                         <label className="text-[10px] font-bold text-slate-400 mb-1.5 flex items-center gap-1 uppercase tracking-wide">
+                           <MapPin className="w-3 h-3" /> 작업 위치
+                         </label>
+                         <input
+                          type="text"
+                          value={photo.location}
+                          onChange={(e) => updatePhoto(photo.id, 'location', e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs focus:border-indigo-500 outline-none bg-slate-50 focus:bg-white"
+                          placeholder="예: 101동"
+                        />
+                      </div>
+                      <div>
+                         <label className="text-[10px] font-bold text-slate-400 mb-1.5 flex items-center gap-1 uppercase tracking-wide">
+                           <Calendar className="w-3 h-3" /> 촬영 일자
+                         </label>
+                         <input
+                          type="date"
+                          value={photo.date}
+                          onChange={(e) => updatePhoto(photo.id, 'date', e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs focus:border-indigo-500 outline-none bg-slate-50 focus:bg-white text-slate-600"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-1.5 uppercase tracking-wide">출력 크롭 위치</label>
+                      <div className="relative">
+                        <select
+                          value={photo.cropPosition || 'center'}
+                          onChange={(e) => updatePhoto(photo.id, 'cropPosition', e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all cursor-pointer font-medium text-slate-700 appearance-none"
+                        >
+                          <option value="top">상단 우선</option>
+                          <option value="center">중앙 기준</option>
+                          <option value="bottom">하단 우선</option>
+                        </select>
+                        <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                          <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Completion / Editing Status Action Button */}
+                    <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">검토 및 상태 체크</span>
+                      <button
+                        type="button"
+                        onClick={() => updatePhoto(photo.id, 'status', isEditing ? 'completed' : 'editing')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
+                          !isEditing
+                            ? 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300'
+                            : 'bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-400 font-extrabold'
+                        }`}
+                        title="클릭하여 완료/수정 상태를 전환합니다"
+                      >
+                        {!isEditing ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            <span>완료 (수정하려면 클릭)</span>
+                          </>
+                        ) : (
+                          <>
+                            <AlertCircle className="w-4 h-4 text-amber-600 animate-pulse" />
+                            <span>수정중 (완료로 변경)</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
+              );
+            })}
+
+            {displayedPhotos.length === 0 && (
+              <div className="col-span-full py-16 text-center border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 bg-slate-50/50 flex flex-col items-center justify-center transition-colors hover:bg-slate-50">
+                <div className="bg-white p-4 rounded-full shadow-sm mb-4">
+                  <Camera className="w-8 h-8 text-indigo-200" />
+                </div>
+                <p className="font-medium text-slate-600">
+                  {statusFilter === 'all' ? '등록된 사진이 없습니다.' : statusFilter === 'completed' ? '완료 처리된 사진이 없습니다.' : '수정 필요/수정중인 사진이 없습니다.'}
+                </p>
+                <p className="text-sm mt-1 text-slate-400">'사진 파일 추가' 버튼을 눌러 증빙 자료를 업로드하세요.</p>
               </div>
-            </div>
+            )}
           </div>
-        ))}
-        {photos.length === 0 && (
-          <div className="col-span-full py-16 text-center border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 bg-slate-50/50 flex flex-col items-center justify-center transition-colors hover:bg-slate-50">
-            <div className="bg-white p-4 rounded-full shadow-sm mb-4">
-              <Camera className="w-8 h-8 text-indigo-200" />
-            </div>
-            <p className="font-medium text-slate-600">등록된 사진이 없습니다.</p>
-            <p className="text-sm mt-1 text-slate-400">'사진 파일 추가' 버튼을 눌러 증빙 자료를 업로드하세요.</p>
-          </div>
-        )}
-      </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

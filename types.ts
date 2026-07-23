@@ -53,6 +53,7 @@ export interface PhotoEvidence {
   date: string;
   orientation?: 'portrait' | 'landscape' | 'square';
   cropPosition?: 'top' | 'center' | 'bottom';
+  status?: 'completed' | 'editing';
 }
 
 export type DailyAttendance = Record<string, Record<string, number>>; // Date (YYYY-MM-DD) -> WorkerID -> Gongsu
