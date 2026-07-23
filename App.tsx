@@ -578,8 +578,10 @@ function App() {
           projectInfo,
           workers: maskWorkersRRN(workers),
           attendance,
+          attendanceRole,
           safetyWorkers: maskWorkersRRN(safetyWorkers),
           safetyAttendance,
+          safetyAttendanceRole,
           safetyItems,
           annualBudget,
           uploadQualityPreset,
@@ -792,6 +794,10 @@ function App() {
         const incomingAttendance = selections.restoreLaborAttendance && parsed.data.attendance && typeof parsed.data.attendance === 'object' ? parsed.data.attendance : {};
         return isMergeMode ? mergeAttendance(prev, incomingAttendance) : incomingAttendance;
       });
+      setAttendanceRole(prev => {
+        const incomingAttendanceRole = selections.restoreLaborAttendance && parsed.data.attendanceRole && typeof parsed.data.attendanceRole === 'object' ? parsed.data.attendanceRole : {};
+        return isMergeMode ? mergeAttendance(prev as any, incomingAttendanceRole as any) as any : incomingAttendanceRole;
+      });
 
       if (selections.restoreLaborPhotos) {
         const restored = await restorePhotosWithValidation(
@@ -810,6 +816,10 @@ function App() {
       setSafetyAttendance(prev => {
         const incomingAttendance = selections.restoreSafetyAttendance && parsed.data.safetyAttendance && typeof parsed.data.safetyAttendance === 'object' ? parsed.data.safetyAttendance : {};
         return isMergeMode ? mergeAttendance(prev, incomingAttendance) : incomingAttendance;
+      });
+      setSafetyAttendanceRole(prev => {
+        const incomingSafetyAttendanceRole = selections.restoreSafetyAttendance && parsed.data.safetyAttendanceRole && typeof parsed.data.safetyAttendanceRole === 'object' ? parsed.data.safetyAttendanceRole : {};
+        return isMergeMode ? mergeAttendance(prev as any, incomingSafetyAttendanceRole as any) as any : incomingSafetyAttendanceRole;
       });
       setSafetyItems(prev => {
         const incomingItems = Array.isArray(parsed.data.safetyItems) ? parsed.data.safetyItems : [];

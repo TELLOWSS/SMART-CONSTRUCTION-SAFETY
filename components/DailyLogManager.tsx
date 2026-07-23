@@ -172,32 +172,53 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
     }));
   };
 
+  // Safe state accessors to prevent crashes from uninitialized or old restored backup data
+  const safeWorkers = Array.isArray(workers) ? workers : [];
+  const safeSafetyWorkers = Array.isArray(safetyWorkers) ? safetyWorkers : [];
+  const safeAttendance = attendance || {};
+  const safeAttendanceRole = attendanceRole || {};
+  const safeSafetyAttendance = safetyAttendance || {};
+  const safePhotos = Array.isArray(photos) ? photos : [];
+  const safeSafetyPhotos = Array.isArray(safetyPhotos) ? safetyPhotos : [];
+
+  const baseLaborCategories = (laborCategoryOptions && laborCategoryOptions.length > 0 ? laborCategoryOptions : WORKER_ROLES);
+  const resolvedLaborCategories = Array.from(new Set([
+    ...baseLaborCategories,
+    ...safeWorkers.map(w => w?.role).filter(Boolean)
+  ]));
+
+  const baseSafetyCategories = (safetyCategoryOptions && safetyCategoryOptions.length > 0 ? safetyCategoryOptions : WORKER_ROLES);
+  const resolvedSafetyCategories = Array.from(new Set([
+    ...baseSafetyCategories,
+    ...safeSafetyWorkers.map(w => w?.role).filter(Boolean)
+  ]));
+
   // Filter workers based on hideZeroAttendance toggle
   const filteredWorkers = hideZeroAttendance
-    ? workers.filter(worker => {
-        const currentGongsu = attendance[selectedDate]?.[worker.id] || 0;
+    ? safeWorkers.filter(worker => {
+        if (!worker || !worker.id) return false;
+        const currentGongsu = safeAttendance[selectedDate]?.[worker.id] || 0;
         return currentGongsu > 0;
       })
-    : workers;
+    : safeWorkers;
 
   const filteredSafetyWorkers = hideZeroAttendance
-    ? safetyWorkers.filter(worker => {
-        const currentGongsu = safetyAttendance[selectedDate]?.[worker.id] || 0;
+    ? safeSafetyWorkers.filter(worker => {
+        if (!worker || !worker.id) return false;
+        const currentGongsu = safeSafetyAttendance[selectedDate]?.[worker.id] || 0;
         return currentGongsu > 0;
       })
-    : safetyWorkers;
+    : safeSafetyWorkers;
 
-  const todaysPhotos = photos.filter(p => p.date === selectedDate);
-  const todaysSafetyPhotos = safetyPhotos.filter(p => p.date === selectedDate);
-  const resolvedLaborCategories = (laborCategoryOptions && laborCategoryOptions.length > 0 ? laborCategoryOptions : WORKER_ROLES);
-  const resolvedSafetyCategories = (safetyCategoryOptions && safetyCategoryOptions.length > 0 ? safetyCategoryOptions : WORKER_ROLES);
+  const todaysPhotos = safePhotos.filter(p => p && p.date === selectedDate);
+  const todaysSafetyPhotos = safeSafetyPhotos.filter(p => p && p.date === selectedDate);
 
   // Real-time daily & monthly attendance statistics
-  const todaysLaborGongsu = workers.reduce((sum, w) => sum + (attendance[selectedDate]?.[w.id] || 0), 0);
-  const todaysLaborWorkersCount = workers.filter(w => (attendance[selectedDate]?.[w.id] || 0) > 0).length;
+  const todaysLaborGongsu = safeWorkers.reduce((sum, w) => sum + (w?.id ? (safeAttendance[selectedDate]?.[w.id] || 0) : 0), 0);
+  const todaysLaborWorkersCount = safeWorkers.filter(w => w?.id && (safeAttendance[selectedDate]?.[w.id] || 0) > 0).length;
 
-  const todaysSafetyGongsu = safetyWorkers.reduce((sum, w) => sum + (safetyAttendance[selectedDate]?.[w.id] || 0), 0);
-  const todaysSafetyWorkersCount = safetyWorkers.filter(w => (safetyAttendance[selectedDate]?.[w.id] || 0) > 0).length;
+  const todaysSafetyGongsu = safeSafetyWorkers.reduce((sum, w) => sum + (w?.id ? (safeSafetyAttendance[selectedDate]?.[w.id] || 0) : 0), 0);
+  const todaysSafetyWorkersCount = safeSafetyWorkers.filter(w => w?.id && (safeSafetyAttendance[selectedDate]?.[w.id] || 0) > 0).length;
 
   const [selYearStr, selMonthStr] = selectedDate.split('-');
   const selYearNum = Number(selYearStr || year);
@@ -206,21 +227,22 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
 
   const monthlyLaborGongsu = Array.from({ length: daysInSelMonth }, (_, i) => i + 1).reduce((sum, day) => {
     const dateStr = `${selYearStr}-${selMonthStr}-${String(day).padStart(2, '0')}`;
-    const dayAttendance = attendance[dateStr] || {};
+    const dayAttendance = safeAttendance[dateStr] || {};
     return sum + Object.values(dayAttendance).reduce((s, v) => s + v, 0);
   }, 0);
 
   const monthlySafetyGongsu = Array.from({ length: daysInSelMonth }, (_, i) => i + 1).reduce((sum, day) => {
     const dateStr = `${selYearStr}-${selMonthStr}-${String(day).padStart(2, '0')}`;
-    const dayAttendance = safetyAttendance[dateStr] || {};
+    const dayAttendance = safeSafetyAttendance[dateStr] || {};
     return sum + Object.values(dayAttendance).reduce((s, v) => s + v, 0);
   }, 0);
 
   // Today's breakdown by subdivided role (considering daily role overrides)
-  const todaysRoleBreakdown = workers.reduce((acc, worker) => {
-    const gongsu = attendance[selectedDate]?.[worker.id] || 0;
+  const todaysRoleBreakdown = safeWorkers.reduce((acc, worker) => {
+    if (!worker || !worker.id) return acc;
+    const gongsu = safeAttendance[selectedDate]?.[worker.id] || 0;
     if (gongsu > 0) {
-      const role = attendanceRole[selectedDate]?.[worker.id] || worker.role || '기타';
+      const role = safeAttendanceRole[selectedDate]?.[worker.id] || worker.role || '기타';
       if (!acc[role]) {
         acc[role] = { count: 0, gongsu: 0 };
       }
@@ -594,22 +616,25 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
                </div>
             ) : (
               filteredWorkers.map(worker => {
-                const currentGongsu = attendance[selectedDate]?.[worker.id] || 0;
-                const currentAssignedRole = attendanceRole[selectedDate]?.[worker.id] || worker.role;
-                const isOverridden = Boolean(attendanceRole[selectedDate]?.[worker.id] && attendanceRole[selectedDate]?.[worker.id] !== worker.role);
+                if (!worker || !worker.id) return null;
+                const workerRole = worker.role || WORKER_ROLES[0] || '기타';
+                const workerName = worker.name || '미입력';
+                const currentGongsu = safeAttendance[selectedDate]?.[worker.id] || 0;
+                const currentAssignedRole = safeAttendanceRole[selectedDate]?.[worker.id] || workerRole;
+                const isOverridden = Boolean(safeAttendanceRole[selectedDate]?.[worker.id] && safeAttendanceRole[selectedDate]?.[worker.id] !== workerRole);
                 
                 return (
                   <div key={worker.id} className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl border transition-all duration-200 group ${currentGongsu > 0 ? 'bg-indigo-50/50 border-indigo-200 shadow-sm' : 'bg-white border-slate-100 hover:border-slate-300'}`}>
                     <div className="flex items-center gap-3">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${currentGongsu > 0 ? 'bg-indigo-200 text-indigo-800' : 'bg-slate-100 text-slate-500'}`}>
-                        {worker.name.charAt(0)}
+                        {workerName.charAt(0)}
                       </div>
                       <div>
                         <div className="font-bold text-slate-800 text-base flex items-center gap-2">
-                          <span>{worker.name}</span>
+                          <span>{workerName}</span>
                           {isOverridden && (
                             <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded border border-amber-200">
-                              일별 변경됨 (기본: {worker.role})
+                              일별 변경됨 (기본: {workerRole})
                             </span>
                           )}
                         </div>
