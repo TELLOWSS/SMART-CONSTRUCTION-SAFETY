@@ -182,6 +182,34 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
     const dayAttendance = safetyAttendance[dateStr] || {};
     return sum + Object.values(dayAttendance).reduce((s, v) => s + v, 0);
   }, 0);
+
+  // Today's breakdown by subdivided role
+  const todaysRoleBreakdown = workers.reduce((acc, worker) => {
+    const gongsu = attendance[selectedDate]?.[worker.id] || 0;
+    if (gongsu > 0) {
+      const role = worker.role || '기타';
+      if (!acc[role]) {
+        acc[role] = { count: 0, gongsu: 0 };
+      }
+      acc[role].count += 1;
+      acc[role].gongsu += gongsu;
+    }
+    return acc;
+  }, {} as Record<string, { count: number; gongsu: number }>);
+
+  if (safetyWorkers.length > 0) {
+    safetyWorkers.forEach(worker => {
+      const gongsu = safetyAttendance[selectedDate]?.[worker.id] || 0;
+      if (gongsu > 0) {
+        const role = worker.role || '안전시설';
+        if (!todaysRoleBreakdown[role]) {
+          todaysRoleBreakdown[role] = { count: 0, gongsu: 0 };
+        }
+        todaysRoleBreakdown[role].count += 1;
+        todaysRoleBreakdown[role].gongsu += gongsu;
+      }
+    });
+  }
   
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'labor' | 'safety' = 'labor') => {
     if (e.target.files && e.target.files.length > 0) {
@@ -477,6 +505,24 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
               </div>
             </div>
           </div>
+
+          {/* Real-time Subdivided Role Breakdown Chips */}
+          {Object.keys(todaysRoleBreakdown).length > 0 && (
+            <div className="mb-6 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
+              <div className="text-[11px] font-bold text-slate-500 mb-2 flex items-center gap-1.5">
+                <span>📊 금일 세분화 항목(직종)별 출역 현황</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(todaysRoleBreakdown).map(([role, data]) => (
+                  <div key={role} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-indigo-200 text-slate-800 rounded-xl text-xs font-bold shadow-xs">
+                    <span className="text-indigo-900">{role}:</span>
+                    <span className="text-emerald-700 font-extrabold">{data.count}명</span>
+                    <span className="text-slate-400 font-medium text-[11px]">({data.gongsu % 1 === 0 ? data.gongsu : data.gongsu.toFixed(1)}공수)</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           
           <div className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-3">유도원 및 감시자 인건비</div>
           <div className="space-y-4">

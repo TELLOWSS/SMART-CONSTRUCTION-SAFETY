@@ -190,6 +190,23 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
       return acc + reportWorkers.filter(worker => (getDailyValue(worker.id, day) || 0) > 0).length;
     }, 0);
 
+    // Subdivided role summary breakdown
+    const roleSummaryMap = reportWorkers.reduce((acc, worker) => {
+      const role = worker.role || '기타';
+      const gongsu = getMonthlyDaysWorked(worker.id);
+      const cost = gongsu * worker.dailyRate;
+      
+      if (!acc[role]) {
+        acc[role] = { role, workerCount: 0, gongsu: 0, cost: 0 };
+      }
+      acc[role].workerCount += 1;
+      acc[role].gongsu += gongsu;
+      acc[role].cost += cost;
+      return acc;
+    }, {} as Record<string, { role: string; workerCount: number; gongsu: number; cost: number }>);
+
+    const roleSummaries = Object.values(roleSummaryMap).sort((a, b) => b.cost - a.cost);
+
     return (
       <div className="mb-8 break-inside-avoid">
         <h3 className="text-lg font-bold mb-3 flex items-center gap-2 text-slate-800">
@@ -330,6 +347,35 @@ export const LaborCostTable: React.FC<Props> = ({ workers, setWorkers, attendanc
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Subdivided Role Summary Table (세분화 항목/직종별 집계 요약 표) */}
+          {reportWorkers.length > 0 && roleSummaries.length > 0 && (
+            <div className="border border-slate-400 bg-white text-xs break-inside-avoid my-4 rounded-sm overflow-hidden">
+              <div className="bg-slate-700 text-white p-2 font-bold flex justify-between items-center text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 bg-amber-400 rounded-full inline-block"></span>
+                  <span>세분화 항목(직종)별 집계 요약</span>
+                </div>
+                <span className="text-slate-200 text-[11px] font-normal">총 {roleSummaries.length}개 세분화 항목 분류</span>
+              </div>
+              <div className="grid grid-cols-12 bg-slate-100 border-b border-slate-300 font-bold text-center text-[11px]">
+                <div className="col-span-1 border-r border-slate-300 p-1.5">번호</div>
+                <div className="col-span-4 border-r border-slate-300 p-1.5 text-left pl-3">세분화 항목 (직종명)</div>
+                <div className="col-span-2 border-r border-slate-300 p-1.5">인원수</div>
+                <div className="col-span-2 border-r border-slate-300 p-1.5">누계 공수</div>
+                <div className="col-span-3 p-1.5 text-right pr-3">노무비 집행 금액</div>
+              </div>
+              {roleSummaries.map((item, idx) => (
+                <div key={item.role} className="grid grid-cols-12 border-b border-slate-200 last:border-b-0 text-center items-center text-[11px]">
+                  <div className="col-span-1 border-r border-slate-200 p-1.5 bg-slate-50 font-bold">{idx + 1}</div>
+                  <div className="col-span-4 border-r border-slate-200 p-1.5 text-left pl-3 font-bold text-slate-800">{item.role}</div>
+                  <div className="col-span-2 border-r border-slate-200 p-1.5">{item.workerCount} 명</div>
+                  <div className="col-span-2 border-r border-slate-200 p-1.5 font-bold text-indigo-900">{item.gongsu % 1 === 0 ? item.gongsu : item.gongsu.toFixed(1)} 공수</div>
+                  <div className="col-span-3 p-1.5 text-right pr-3 font-bold text-slate-900">{item.cost.toLocaleString()} 원</div>
+                </div>
+              ))}
             </div>
           )}
 
