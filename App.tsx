@@ -7,7 +7,7 @@ import { PhotoLedger } from './components/PhotoLedger';
 import { DailyLogManager } from './components/DailyLogManager';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RestoreOptionsModal, RestoreSelections, RestoreSummary } from './components/RestoreOptionsModal';
-import { ProjectInfo, Worker, PhotoEvidence, DailyAttendance, SafetyItem, WORKER_ROLES } from './types';
+import { ProjectInfo, Worker, PhotoEvidence, DailyAttendance, DailyAttendanceRole, SafetyItem, WORKER_ROLES } from './types';
 import { Printer, Layout, FileText, ShieldCheck, CalendarCheck, HelpCircle, BarChart3, ChevronRight, ChevronUp, Clock, Download, Upload, RotateCcw, ShoppingCart, Loader2, Save, FilePlus, ArrowLeftRight, Trash2, Lock, LockOpen } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { 
@@ -428,12 +428,19 @@ function App() {
 
     setIsPrinting(true);
     setActiveTab('preview');
-    // Allow React to render the preview view completely before triggering print
-    // Increased timeout to ensure browser layout is finalized
-    setTimeout(() => {
-      window.print();
-      setIsPrinting(false);
-    }, 800);
+
+    // Ensure DOM paint and image rendering are completely settled before opening print dialog
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          try {
+            window.print();
+          } finally {
+            setIsPrinting(false);
+          }
+        }, 500);
+      });
+    });
   };
 
   const handlePrint = () => {
@@ -1092,7 +1099,7 @@ function App() {
   const currentMonthClosedAt = currentMonthSnapshot?.closedAt
     ? new Date(currentMonthSnapshot.closedAt).toLocaleString('ko-KR')
     : '';
-  const allSortedMonthlySnapshots = Object.entries(monthlySnapshots).sort(([a], [b]) => a.localeCompare(b));
+  const allSortedMonthlySnapshots = (Object.entries(monthlySnapshots) as [string, MonthlySnapshot][]).sort(([a], [b]) => a.localeCompare(b));
   const availableMonthKeys = allSortedMonthlySnapshots.map(([monthKey]) => monthKey);
   const normalizedSelectedMonth = selectedMonth || currentMonthKey;
 
@@ -1435,7 +1442,7 @@ function App() {
       ]
     );
 
-    const sortedMonthlyEntries = Object.entries(monthlySnapshots)
+    const sortedMonthlyEntries = (Object.entries(monthlySnapshots) as [string, MonthlySnapshot][])
       .sort(([a], [b]) => a.localeCompare(b));
 
     let cumulativeTotal = 0;

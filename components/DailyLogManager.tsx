@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Worker, PhotoEvidence, DailyAttendance, PHOTO_CATEGORIES, WORKER_ROLES, CompressionResult } from '../types';
+import { Worker, PhotoEvidence, DailyAttendance, DailyAttendanceRole, PHOTO_CATEGORIES, WORKER_ROLES, CompressionResult } from '../types';
 import { Calendar, ChevronLeft, ChevronRight, CheckCircle2, Circle, Camera, Plus, MapPin, ImagePlus, Edit3, User, Clock, Loader2, EyeOff, Eye, RotateCcw } from 'lucide-react';
 import { estimateMemoryUsage, optimizeImage, processInChunks } from '../utils/photoOptimization';
 import { ZoomableImage } from './ZoomableImage';
@@ -202,6 +202,7 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
   const safeAttendance = attendance || {};
   const safeAttendanceRole = attendanceRole || {};
   const safeSafetyAttendance = safetyAttendance || {};
+  const safeSafetyAttendanceRole = safetyAttendanceRole || {};
   const safePhotos = Array.isArray(photos) ? photos : [];
   const safeSafetyPhotos = Array.isArray(safetyPhotos) ? safetyPhotos : [];
 
@@ -249,16 +250,16 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
   const selMonthNum = Number(selMonthStr || month);
   const daysInSelMonth = new Date(selYearNum, selMonthNum, 0).getDate();
 
-  const monthlyLaborGongsu = Array.from({ length: daysInSelMonth }, (_, i) => i + 1).reduce((sum, day) => {
+  const monthlyLaborGongsu = Array.from({ length: daysInSelMonth }, (_, i) => i + 1).reduce((sum: number, day) => {
     const dateStr = `${selYearStr}-${selMonthStr}-${String(day).padStart(2, '0')}`;
-    const dayAttendance = safeAttendance[dateStr] || {};
-    return sum + Object.values(dayAttendance).reduce((s, v) => s + v, 0);
+    const dayAttendance = (safeAttendance[dateStr] || {}) as Record<string, number>;
+    return sum + (Object.values(dayAttendance) as number[]).reduce((s: number, v: number) => s + (Number(v) || 0), 0);
   }, 0);
 
-  const monthlySafetyGongsu = Array.from({ length: daysInSelMonth }, (_, i) => i + 1).reduce((sum, day) => {
+  const monthlySafetyGongsu = Array.from({ length: daysInSelMonth }, (_, i) => i + 1).reduce((sum: number, day) => {
     const dateStr = `${selYearStr}-${selMonthStr}-${String(day).padStart(2, '0')}`;
-    const dayAttendance = safeSafetyAttendance[dateStr] || {};
-    return sum + Object.values(dayAttendance).reduce((s, v) => s + v, 0);
+    const dayAttendance = (safeSafetyAttendance[dateStr] || {}) as Record<string, number>;
+    return sum + (Object.values(dayAttendance) as number[]).reduce((s: number, v: number) => s + (Number(v) || 0), 0);
   }, 0);
 
   // Today's breakdown by subdivided role (considering daily role overrides)
@@ -743,7 +744,7 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
                 <span>📊 금일 세분화 항목(직종)별 출역 현황</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {Object.entries(todaysRoleBreakdown).map(([role, data]) => (
+                {(Object.entries(todaysRoleBreakdown) as [string, { count: number; gongsu: number }][]).map(([role, data]) => (
                   <div key={role} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-indigo-200 text-slate-800 rounded-xl text-xs font-bold shadow-xs">
                     <span className="text-indigo-900">{role}:</span>
                     <span className="text-emerald-700 font-extrabold">{data.count}명</span>

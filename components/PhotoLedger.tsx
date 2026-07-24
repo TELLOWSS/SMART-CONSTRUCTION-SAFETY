@@ -388,28 +388,38 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, workers, atten
 
     let isCancelled = false;
 
-    const inferLegacyOrientations = async () => {
+    // Process lightweight orientation inference without fetch() or Blob duplication
+    const inferOrientationsSequentially = async () => {
       const updates: Record<string, 'portrait' | 'landscape' | 'square'> = {};
+      const BATCH_SIZE = 3;
 
-      await Promise.all(
-        targets.map(async (photo) => {
-          try {
-            const response = await fetch(photo.fileUrl);
-            if (!response.ok) return;
-            const blob = await response.blob();
-            updates[photo.id] = await getImageOrientation(blob);
-          } catch {
-            return;
-          }
-        })
-      );
+      for (let i = 0; i < targets.length; i += BATCH_SIZE) {
+        if (isCancelled) break;
+        const chunk = targets.slice(i, i + BATCH_SIZE);
+        await Promise.all(
+          chunk.map(
+            photo =>
+              new Promise<void>(resolve => {
+                const img = new Image();
+                img.onload = () => {
+                  if (img.height > img.width) updates[photo.id] = 'portrait';
+                  else if (img.width > img.height) updates[photo.id] = 'landscape';
+                  else updates[photo.id] = 'square';
+                  resolve();
+                };
+                img.onerror = () => resolve();
+                img.src = photo.fileUrl;
+              })
+          )
+        );
+      }
 
       if (!isCancelled && Object.keys(updates).length > 0) {
         setInferredOrientations(prev => ({ ...prev, ...updates }));
       }
     };
 
-    inferLegacyOrientations();
+    inferOrientationsSequentially();
 
     return () => {
       isCancelled = true;
@@ -444,7 +454,13 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, workers, atten
           {sortedPhotos.map((photo, index) => (
             <div key={photo.id} className="print-break-inside-avoid border-r border-b border-slate-400 p-2">
                 <div className={`${getFrameAspectClass(photo)} w-full overflow-hidden border border-slate-200 mb-2 relative bg-gray-100`}>
-                  <ZoomableImage src={photo.fileUrl} alt={photo.category} className={`object-cover ${getObjectPositionClass(photo)} w-full h-full`} />
+                  <img 
+                    src={photo.fileUrl} 
+                    alt={photo.category} 
+                    className={`object-cover ${getObjectPositionClass(photo)} w-full h-full`} 
+                    loading="lazy" 
+                    decoding="async" 
+                  />
                 </div>
               <div className="text-sm">
                 <table className="w-full border-collapse border border-slate-300 text-xs">

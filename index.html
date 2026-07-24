@@ -31,12 +31,17 @@
 
       @media print {
         @page { margin: 10mm; size: A4; }
-        body { background-color: white !important; -webkit-print-color-adjust: exact; }
+        body { background-color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .no-print { display: none !important; }
         .print-break-inside-avoid { break-inside: avoid; }
-        /* Reset shadows and rounded corners for print */
-        .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl { box-shadow: none !important; }
-        .rounded-xl, .rounded-2xl, .rounded-lg { border-radius: 0 !important; }
+        /* Reset shadows, filters, and rounded corners for memory-efficient print layout */
+        *, *::before, *::after {
+          box-shadow: none !important;
+          text-shadow: none !important;
+          filter: none !important;
+          backdrop-filter: none !important;
+        }
+        .rounded-xl, .rounded-2xl, .rounded-3xl, .rounded-lg { border-radius: 0 !important; }
         /* Page layout for attachment sections */
         .print\:break-after-page { break-after: page !important; }
         .print\:mt-0 { margin-top: 0 !important; }
@@ -47,6 +52,11 @@
         .animate-in, .fade-in, .zoom-in-95, .slide-in-from-top-2, .slide-in-from-bottom-4 {
           animation: none !important;
           transition: none !important;
+        }
+        img {
+          max-width: 100% !important;
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
         }
       }
     </style>
