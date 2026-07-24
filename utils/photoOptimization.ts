@@ -63,6 +63,105 @@ export const isWebPSupported = (): boolean => {
 };
 
 /**
+ * 품질 프리셋별 최대 해상도 및 압축율 규격 정의 (PDF 내보내기 & 저사양 PC 메모리 최적화)
+ */
+export const getPresetDimensions = (
+  preset?: 'low' | 'balanced' | 'high' | string
+): { maxWidth: number; maxHeight: number; quality: number } => {
+  switch (preset) {
+    case 'low':
+      // 저사양/PDF 전용 초슬림 모드: 800px max, 55% 품질 (사진당 60~120KB)
+      return { maxWidth: 800, maxHeight: 800, quality: 0.55 };
+    case 'balanced':
+      // 표준 균형 모드: 1024px max, 65% 품질 (사진당 120~220KB)
+      return { maxWidth: 1024, maxHeight: 1024, quality: 0.65 };
+    case 'high':
+      // 고화질 모드: 1280px max, 78% 품질 (사진당 250~450KB)
+      return { maxWidth: 1280, maxHeight: 1280, quality: 0.78 };
+    default:
+      return { maxWidth: 1024, maxHeight: 1024, quality: 0.65 };
+  }
+};
+
+/**
+ * 기존에 등록된 사진 리스트를 선택한 프리셋 기준으로 일괄 재압축/다운스케일링 (PDF 출력 전 메모리 절감)
+ */
+export const reoptimizePhotoList = async <T extends { id: string; fileUrl: string }>(
+  photos: T[],
+  preset?: 'low' | 'balanced' | 'high' | string,
+  onProgress?: (current: number, total: number) => void
+): Promise<T[]> => {
+  if (!photos || photos.length === 0) return [];
+  const { maxWidth, maxHeight, quality } = getPresetDimensions(preset);
+  const updatedPhotos: T[] = [];
+  const total = photos.length;
+
+  for (let i = 0; i < total; i++) {
+    const photo = photos[i];
+    try {
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('이미지 로드 실패'));
+        img.src = photo.fileUrl;
+      });
+
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, width, height);
+        const mimeType = isWebPSupported() ? 'image/webp' : 'image/jpeg';
+        const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, mimeType, quality));
+
+        if (blob) {
+          const newBlobUrl = URL.createObjectURL(blob);
+          if (photo.fileUrl.startsWith('blob:')) {
+            try { URL.revokeObjectURL(photo.fileUrl); } catch {}
+          }
+          updatedPhotos.push({
+            ...photo,
+            fileUrl: newBlobUrl,
+          });
+        } else {
+          updatedPhotos.push(photo);
+        }
+      } else {
+        updatedPhotos.push(photo);
+      }
+    } catch (err) {
+      console.warn(`사진 최적화 처리 건너뜀 (${photo.id}):`, err);
+      updatedPhotos.push(photo);
+    }
+
+    if (onProgress) {
+      onProgress(i + 1, total);
+    }
+    if (i % 5 === 0) {
+      await new Promise(r => setTimeout(r, 10));
+    }
+  }
+
+  return updatedPhotos;
+};
+
+/**
  * 이미지를 WebP 또는 JPEG로 변환 (더 효율적인 형식 선택)
  * 
  * @param file - 원본 이미지 파일
@@ -73,9 +172,9 @@ export const isWebPSupported = (): boolean => {
  */
 export const optimizeImage = (
   file: File,
-  maxWidth: number = 1280,
-  maxHeight: number = 1280,
-  qualityLevel: number = 0.7
+  maxWidth: number = 1024,
+  maxHeight: number = 1024,
+  qualityLevel: number = 0.65
 ): Promise<{ blob: Blob; metadata: PhotoMetadata; base64: string }> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

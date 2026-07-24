@@ -15,7 +15,9 @@ import {
   createBlobUrlFromBase64, 
   processInChunks,
   getPhotoStats,
-  base64ToBlob
+  base64ToBlob,
+  getPresetDimensions,
+  reoptimizePhotoList
 } from './utils/photoOptimization';
 import { clearPhotoState, loadPhotoState, savePhotoState } from './utils/photoPersistence';
 
@@ -2347,7 +2349,17 @@ function App() {
                     <span>안전시설 재료비 내역(품목) 포함</span>
                 </label>
               </div>
-              <div className="w-full grid grid-cols-1 sm:grid-cols-4 gap-1.5 sm:gap-2">
+              <div className="w-full grid grid-cols-1 sm:grid-cols-5 gap-1.5 sm:gap-2">
+                <select
+                  value={uploadQualityPreset}
+                  onChange={(e) => setUploadQualityPreset(e.target.value as 'low' | 'balanced' | 'high')}
+                  className="border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-amber-900 bg-amber-50"
+                  title="PDF 내보내기 및 저사양 PC 메모리 절감을 위한 사진 해상도/품질 프리셋"
+                >
+                  <option value="low">⚡ PDF 저사양 모드 (800px / 메모리 70% 절감)</option>
+                  <option value="balanced">⚖️ 표준 균형 모드 (1024px / 권장)</option>
+                  <option value="high">🖼️ 고화질 모드 (1280px)</option>
+                </select>
                 <select
                   value={printScopeMode}
                   onChange={(e) => setPrintScopeMode(e.target.value as 'single' | 'range')}

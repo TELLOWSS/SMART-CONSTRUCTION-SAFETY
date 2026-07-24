@@ -1,8 +1,8 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { PhotoEvidence, PHOTO_CATEGORIES, CompressionResult, Worker, DailyAttendance, DailyAttendanceRole } from '../types';
-import { ImagePlus, MapPin, Calendar, X, Camera, Loader2, ChevronDown, ChevronUp, RotateCcw, CheckCircle2, AlertCircle, Filter, Edit3 } from 'lucide-react';
-import { estimateMemoryUsage, optimizeImage, processInChunks } from '../utils/photoOptimization';
+import { ImagePlus, MapPin, Calendar, X, Camera, Loader2, ChevronDown, ChevronUp, RotateCcw, CheckCircle2, AlertCircle, Filter, Edit3, Zap } from 'lucide-react';
+import { estimateMemoryUsage, optimizeImage, processInChunks, getPresetDimensions, reoptimizePhotoList } from '../utils/photoOptimization';
 import { ZoomableImage } from './ZoomableImage';
 
 interface Props {
@@ -57,7 +57,8 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, workers, atten
     const file = e.target.files[0];
     setIsProcessing(true);
     try {
-      const { blob } = await optimizeImage(file, 1280, 1280, 0.68);
+      const preset = getPresetDimensions(uploadQualityPreset);
+      const { blob } = await optimizeImage(file, preset.maxWidth, preset.maxHeight, preset.quality);
       let orientation: 'portrait' | 'landscape' | 'square' = 'landscape';
       try {
         orientation = await getImageOrientation(blob);
@@ -236,13 +237,13 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, workers, atten
           validFiles,
           async (file): Promise<CompressionResult & { base64?: string }> => {
             try {
-              const baseQuality = uploadQualityPreset === 'low' ? 0.58 : uploadQualityPreset === 'high' ? 0.8 : 0.68;
+              const preset = getPresetDimensions(uploadQualityPreset);
               const quality = file.size > 8 * 1024 * 1024
-                ? Math.max(baseQuality - 0.08, 0.5)
+                ? Math.max(preset.quality - 0.08, 0.45)
                 : file.size > 4 * 1024 * 1024
-                  ? Math.max(baseQuality - 0.03, 0.52)
-                  : baseQuality;
-              const { blob, base64 } = await optimizeImage(file, 1280, 1280, quality);
+                  ? Math.max(preset.quality - 0.03, 0.50)
+                  : preset.quality;
+              const { blob, base64 } = await optimizeImage(file, preset.maxWidth, preset.maxHeight, quality);
               return { success: true, blob, file, base64 };
             } catch (error) {
               return { success: false, error, file };
@@ -370,6 +371,27 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, workers, atten
     }
     setPhotos(prev => prev.map(photo => selectedPhotoIds.includes(photo.id) ? { ...photo, status } : photo));
     setSelectedPhotoIds([]);
+  };
+
+  const handleReoptimizeAll = async () => {
+    if (photos.length === 0) {
+      alert("최적화할 사진이 없습니다.");
+      return;
+    }
+    const presetInfo = uploadQualityPreset === 'low' ? '800px 저사양 PDF 전용' : uploadQualityPreset === 'high' ? '1280px 고화질' : '1024px 표준 균형';
+    if (!window.confirm(`현재 등록된 ${photos.length}장의 사진을 [${presetInfo}] 규격으로 일괄 자동 최적화하시겠습니까?\n\n사진 해상도와 데이터 용량이 최적으로 줄어들어 PDF 저장 및 저사양 PC 출력이 훨씬 빨라집니다.`)) {
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const updated = await reoptimizePhotoList(photos, uploadQualityPreset);
+      setPhotos(updated);
+      alert(`🎉 총 ${photos.length}장의 사진 용량 최적화가 완료되었습니다!`);
+    } catch (err) {
+      alert("사진 용량 최적화 중 오류가 발생했습니다.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const removePhoto = (id: string) => {
@@ -511,11 +533,25 @@ export const PhotoLedger: React.FC<Props> = ({ photos, setPhotos, workers, atten
           <h2 className="text-xl font-bold text-slate-800">{title || "증빙 사진 업로드"}</h2>
           {sectionCollapsed ? <ChevronDown className="w-5 h-5 text-slate-400 shrink-0" /> : <ChevronUp className="w-5 h-5 text-slate-400 shrink-0" />}
         </button>
-        <label className={`ml-4 cursor-pointer bg-slate-900 hover:bg-black text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-md active:scale-95 ${isProcessing ? 'opacity-70 cursor-wait' : ''}`}>
-          {isProcessing ? <Loader2 className="w-4 h-4 animate-spin"/> : <ImagePlus className="w-4 h-4" />}
-          {isProcessing ? '처리중...' : '사진 파일 추가'}
-          <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} disabled={isProcessing} multiple />
-        </label>
+        <div className="ml-4 flex items-center gap-2">
+          {photos.length > 0 && (
+            <button
+              type="button"
+              onClick={handleReoptimizeAll}
+              disabled={isProcessing}
+              className="px-3 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title="등록된 모든 사진을 설정된 품질 기준으로 자동 리사이징하여 메모리를 절감합니다"
+            >
+              <Zap className="w-4 h-4 text-amber-600" />
+              <span className="hidden sm:inline">사진 용량 최적화</span>
+            </button>
+          )}
+          <label className={`cursor-pointer bg-slate-900 hover:bg-black text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-md active:scale-95 ${isProcessing ? 'opacity-70 cursor-wait' : ''}`}>
+            {isProcessing ? <Loader2 className="w-4 h-4 animate-spin"/> : <ImagePlus className="w-4 h-4" />}
+            {isProcessing ? '처리중...' : '사진 파일 추가'}
+            <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} disabled={isProcessing} multiple />
+          </label>
+        </div>
       </div>
 
       <input type="file" ref={slotFileInputRef} className="hidden" accept="image/*" onChange={handleSlotFileUpload} disabled={isProcessing} />

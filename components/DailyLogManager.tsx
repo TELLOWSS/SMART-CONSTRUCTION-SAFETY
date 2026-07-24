@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Worker, PhotoEvidence, DailyAttendance, DailyAttendanceRole, PHOTO_CATEGORIES, WORKER_ROLES, CompressionResult } from '../types';
 import { Calendar, ChevronLeft, ChevronRight, CheckCircle2, Circle, Camera, Plus, MapPin, ImagePlus, Edit3, User, Clock, Loader2, EyeOff, Eye, RotateCcw } from 'lucide-react';
-import { estimateMemoryUsage, optimizeImage, processInChunks } from '../utils/photoOptimization';
+import { estimateMemoryUsage, optimizeImage, processInChunks, getPresetDimensions } from '../utils/photoOptimization';
 import { ZoomableImage } from './ZoomableImage';
 
 interface Props {
@@ -325,13 +325,13 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
           validFiles,
           async (file): Promise<CompressionResult & { base64?: string }> => {
             try {
-              const baseQuality = uploadQualityPreset === 'low' ? 0.58 : uploadQualityPreset === 'high' ? 0.8 : 0.68;
+              const preset = getPresetDimensions(uploadQualityPreset);
               const quality = file.size > 8 * 1024 * 1024
-                ? Math.max(baseQuality - 0.08, 0.5)
+                ? Math.max(preset.quality - 0.08, 0.45)
                 : file.size > 4 * 1024 * 1024
-                  ? Math.max(baseQuality - 0.03, 0.52)
-                  : baseQuality;
-              const { blob, base64 } = await optimizeImage(file, 1280, 1280, quality);
+                  ? Math.max(preset.quality - 0.03, 0.50)
+                  : preset.quality;
+              const { blob, base64 } = await optimizeImage(file, preset.maxWidth, preset.maxHeight, quality);
               return { success: true, blob, file, base64 };
             } catch (error) {
               return { success: false, error, file };
@@ -482,7 +482,8 @@ export const DailyLogManager: React.FC<Props> = ({ workers, attendance, setAtten
         files,
         async (file) => {
           try {
-            const { blob } = await optimizeImage(file, 1280, 1280, 0.68);
+            const preset = getPresetDimensions(uploadQualityPreset);
+            const { blob } = await optimizeImage(file, preset.maxWidth, preset.maxHeight, preset.quality);
             return { success: true, blob, file };
           } catch (error) {
             return { success: false, error, file };
