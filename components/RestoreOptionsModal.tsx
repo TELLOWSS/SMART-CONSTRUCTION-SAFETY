@@ -19,6 +19,7 @@ export interface RestoreSummary {
   safetyAttendanceDays: number;
   safetyPhotoCount: number;
   safetyItemCount: number;
+  periodLabel?: string;
 }
 
 interface Props {
@@ -74,6 +75,7 @@ export const RestoreOptionsModal: React.FC<Props> = ({ isOpen, fileName, summary
               <div className="font-bold text-slate-800 mb-2">백업 정보</div>
               <ul className="space-y-1 text-slate-600">
                 <li>현장명: {summary.siteName}</li>
+                {summary.periodLabel && <li className="font-semibold text-indigo-700">사용 연월 / 백업 기간: {summary.periodLabel}</li>}
                 <li>유도원/감시자 근로자: {summary.workerCount}명</li>
                 <li>유도원/감시자 사진: {summary.laborPhotoCount}장</li>
                 <li>안전시설 근로자: {summary.safetyWorkerCount}명</li>
@@ -89,6 +91,7 @@ export const RestoreOptionsModal: React.FC<Props> = ({ isOpen, fileName, summary
                 <li>• 선택하지 않은 항목은 현재 데이터를 유지합니다.</li>
                 <li>• 덮어쓰기: 선택 섹션 데이터를 백업 파일 기준으로 교체합니다.</li>
                 <li>• 병합: 기존 데이터에 백업 데이터를 추가로 합칩니다.</li>
+                <li>• 복구 완료 시 **공사 개요(사용 연월)** 및 **월간 집계 범위**가 백업 데이터에 맞춰 자동으로 보정됩니다.</li>
               </ul>
             </div>
           </div>

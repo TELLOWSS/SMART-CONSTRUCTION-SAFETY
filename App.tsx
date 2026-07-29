@@ -98,6 +98,47 @@ const getYearMonthFromKey = (monthKey: string): { year: number; month: number } 
   };
 };
 
+const extractBackupMonths = (backupData: any): string[] => {
+  const monthSet = new Set<string>();
+  const data = backupData?.data || backupData;
+  if (!data) return [];
+
+  if (data.projectInfo?.year && data.projectInfo?.month) {
+    const year = Number(data.projectInfo.year);
+    const month = Number(data.projectInfo.month);
+    if (year > 2000 && month >= 1 && month <= 12) {
+      monthSet.add(`${year}-${String(month).padStart(2, '0')}`);
+    }
+  }
+  if (data.monthlySnapshots && typeof data.monthlySnapshots === 'object') {
+    Object.keys(data.monthlySnapshots).forEach(k => {
+      if (/^\d{4}-\d{2}$/.test(k)) monthSet.add(k);
+    });
+  }
+  if (data.attendance && typeof data.attendance === 'object') {
+    Object.keys(data.attendance).forEach(d => {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) monthSet.add(d.slice(0, 7));
+    });
+  }
+  if (data.safetyAttendance && typeof data.safetyAttendance === 'object') {
+    Object.keys(data.safetyAttendance).forEach(d => {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) monthSet.add(d.slice(0, 7));
+    });
+  }
+  if (Array.isArray(data.laborPhotos)) {
+    data.laborPhotos.forEach((p: any) => {
+      if (p?.date && /^\d{4}-\d{2}/.test(p.date)) monthSet.add(p.date.slice(0, 7));
+    });
+  }
+  if (Array.isArray(data.safetyPhotos)) {
+    data.safetyPhotos.forEach((p: any) => {
+      if (p?.date && /^\d{4}-\d{2}/.test(p.date)) monthSet.add(p.date.slice(0, 7));
+    });
+  }
+
+  return Array.from(monthSet).sort();
+};
+
 function App() {
   const [activeTab, setActiveTab] = useState<'setup' | 'daily' | 'preview' | 'guide'>('guide');
   const [projectInfo, setProjectInfo] = useState<ProjectInfo>(INITIAL_PROJECT_INFO);
@@ -252,6 +293,34 @@ function App() {
                     setAnnualBudget(Number(parsed.annualBudget || 0));
                     setUploadQualityPreset(parsed.uploadQualityPreset || 'balanced');
                     setMonthlySnapshots(parsed.monthlySnapshots || {});
+
+                    const draftMonths = extractBackupMonths(parsed);
+                    if (draftMonths.length > 0) {
+                      const latestMonth = draftMonths[draftMonths.length - 1];
+                      const [yStr, mStr] = latestMonth.split('-');
+                      const tYear = Number(yStr);
+                      const tMonth = Number(mStr);
+                      const tMonthKey = getMonthKey(tYear, tMonth);
+
+                      if (parsed.projectInfo) {
+                        setProjectInfo({
+                          ...parsed.projectInfo,
+                          year: parsed.projectInfo.year || tYear,
+                          month: parsed.projectInfo.month || tMonth,
+                        });
+                      }
+
+                      setSelectedMonth(tMonthKey);
+                      setRangeStartMonth(draftMonths[0]);
+                      setRangeEndMonth(latestMonth);
+                      setGraphYear(String(tYear));
+                      setGraphRangeStartMonth(draftMonths[0]);
+                      setGraphRangeEndMonth(latestMonth);
+                      setPrintSingleMonth(tMonthKey);
+                      setPrintRangeStartMonth(draftMonths[0]);
+                      setPrintRangeEndMonth(latestMonth);
+                    }
+
                     setActiveTab('setup'); // Move to setup tab
                 } else {
                     // If user declines, clear the draft so it doesn't ask again immediately
@@ -689,6 +758,17 @@ function App() {
               return;
             }
 
+            const sortedMonths = extractBackupMonths(parsed);
+            let periodLabel = '정보 없음';
+            if (sortedMonths.length === 1) {
+              const [y, m] = sortedMonths[0].split('-');
+              periodLabel = `${y}년 ${parseInt(m)}월 (1개월)`;
+            } else if (sortedMonths.length > 1) {
+              const [sy, sm] = sortedMonths[0].split('-');
+              const [ey, em] = sortedMonths[sortedMonths.length - 1].split('-');
+              periodLabel = `${sy}년 ${parseInt(sm)}월 ~ ${ey}년 ${parseInt(em)}월 (총 ${sortedMonths.length}개월)`;
+            }
+
             const summary: RestoreSummary = {
               siteName: parsed.data.projectInfo?.siteName || '미입력',
               workerCount: Array.isArray(parsed.data.workers) ? parsed.data.workers.length : 0,
@@ -698,6 +778,7 @@ function App() {
               safetyAttendanceDays: parsed.data.safetyAttendance ? Object.keys(parsed.data.safetyAttendance).length : 0,
               safetyPhotoCount: Array.isArray(parsed.data.safetyPhotos) ? parsed.data.safetyPhotos.length : 0,
               safetyItemCount: Array.isArray(parsed.data.safetyItems) ? parsed.data.safetyItems.length : 0,
+              periodLabel,
             };
 
             setRestoreModalState({
@@ -789,10 +870,33 @@ function App() {
       });
     }
 
+    const restoredMonths = extractBackupMonths(parsed);
+    const latestMonthKey = restoredMonths[restoredMonths.length - 1];
+    const minMonthKey = restoredMonths[0];
+
+    let targetYear = projectInfo.year;
+    let targetMonth = projectInfo.month;
+
+    if (parsed.data.projectInfo?.year && parsed.data.projectInfo?.month) {
+      targetYear = Number(parsed.data.projectInfo.year);
+      targetMonth = Number(parsed.data.projectInfo.month);
+    } else if (latestMonthKey) {
+      const [yStr, mStr] = latestMonthKey.split('-');
+      targetYear = Number(yStr);
+      targetMonth = Number(mStr);
+    }
+
     if (selections.restoreLabor) {
-      setProjectInfo(prev => isMergeMode ? { ...prev, ...parsed.data.projectInfo } : {
-        ...INITIAL_PROJECT_INFO,
-        ...parsed.data.projectInfo,
+      setProjectInfo(prev => {
+        const base = isMergeMode ? { ...prev, ...parsed.data.projectInfo } : {
+          ...INITIAL_PROJECT_INFO,
+          ...parsed.data.projectInfo,
+        };
+        return {
+          ...base,
+          year: targetYear,
+          month: targetMonth,
+        };
       });
       setAnnualBudget(prev => isMergeMode ? (Number(parsed.data.annualBudget || 0) || prev) : Number(parsed.data.annualBudget || 0));
       setUploadQualityPreset(prev => isMergeMode ? (parsed.data.uploadQualityPreset || prev) : (parsed.data.uploadQualityPreset || 'balanced'));
@@ -816,6 +920,12 @@ function App() {
         );
         setLaborPhotos(prev => isMergeMode ? mergePhotos(prev, restored) : restored);
       }
+    } else if (parsed.data.projectInfo) {
+      setProjectInfo(prev => ({
+        ...prev,
+        year: targetYear,
+        month: targetMonth,
+      }));
     }
 
     if (selections.restoreSafety) {
@@ -845,13 +955,28 @@ function App() {
       }
     }
 
+    const targetMonthKey = getMonthKey(targetYear, targetMonth);
+    const minKey = minMonthKey || targetMonthKey;
+    const maxKey = latestMonthKey || targetMonthKey;
+
+    setSelectedMonth(targetMonthKey);
+    setRangeStartMonth(minKey);
+    setRangeEndMonth(maxKey);
+    setGraphYear(String(targetYear));
+    setGraphRangeStartMonth(minKey);
+    setGraphRangeEndMonth(maxKey);
+    setPrintSingleMonth(targetMonthKey);
+    setPrintRangeStartMonth(minKey);
+    setPrintRangeEndMonth(maxKey);
+
     const restoredSections: string[] = [];
     if (selections.restoreLabor) restoredSections.push(`유도원/감시자 인건비 (근로자 ${summary.workerCount}명${selections.restoreLaborAttendance ? `, 출역 날짜 ${summary.laborAttendanceDays}일` : ', 출력공수 초기화'}${selections.restoreLaborPhotos ? `, 사진 ${summary.laborPhotoCount}장` : ', 사진 제외'})`);
     if (selections.restoreSafety) restoredSections.push(`안전시설 인건비 (근로자 ${summary.safetyWorkerCount}명, 품목 ${summary.safetyItemCount}개${selections.restoreSafetyAttendance ? `, 출역 날짜 ${summary.safetyAttendanceDays}일` : ', 출력공수 초기화'}${selections.restoreSafetyPhotos ? `, 사진 ${summary.safetyPhotoCount}장` : ', 사진 제외'})`);
+    if (summary.periodLabel) restoredSections.push(`백업 연월/월수 보정: ${summary.periodLabel}`);
 
     setRestoreModalState(null);
     setActiveTab('setup');
-    alert(`✅ 복구가 완료되었습니다.\n\n복구 방식: ${isMergeMode ? '병합' : '덮어쓰기'}\n\n복구된 항목:\n${restoredSections.map(s => `• ${s}`).join('\n')}`);
+    alert(`✅ 복구가 완료되었습니다.\n\n복구 방식: ${isMergeMode ? '병합' : '덮어쓰기'}\n공사 개요(사용 연월: ${targetYear}년 ${targetMonth}월) 및 월간 집계 범위가 백업 데이터에 맞게 자동 보정되었습니다.\n\n복구된 항목:\n${restoredSections.map(s => `• ${s}`).join('\n')}`);
   };
 
   // 사진 복구 - 추가된 안전성 검증
@@ -1241,43 +1366,46 @@ function App() {
   };
 
   useEffect(() => {
-    if (selectedMonth) return;
-    setSelectedMonth(currentMonthKey);
-  }, [selectedMonth, currentMonthKey]);
+    if (!selectedMonth || (availableMonthKeys.length > 0 && !availableMonthKeys.includes(selectedMonth))) {
+      setSelectedMonth(currentMonthKey);
+    }
+  }, [selectedMonth, currentMonthKey, availableMonthKeys]);
 
   useEffect(() => {
-    if (!rangeStartMonth) {
+    if (!rangeStartMonth || (availableMonthKeys.length > 0 && !availableMonthKeys.includes(rangeStartMonth))) {
       setRangeStartMonth(availableMonthKeys[0] || currentMonthKey);
     }
-    if (!rangeEndMonth) {
+    if (!rangeEndMonth || (availableMonthKeys.length > 0 && !availableMonthKeys.includes(rangeEndMonth))) {
       setRangeEndMonth(availableMonthKeys[availableMonthKeys.length - 1] || currentMonthKey);
     }
   }, [rangeStartMonth, rangeEndMonth, availableMonthKeys, currentMonthKey]);
 
   useEffect(() => {
-    if (graphYear) return;
-    setGraphYear(String(projectInfo.year));
-  }, [graphYear, projectInfo.year]);
+    if (!graphYear || (availableYears.length > 0 && !availableYears.includes(graphYear))) {
+      setGraphYear(String(projectInfo.year));
+    }
+  }, [graphYear, projectInfo.year, availableYears]);
 
   useEffect(() => {
-    if (!graphRangeStartMonth) {
+    if (!graphRangeStartMonth || (availableMonthKeys.length > 0 && !availableMonthKeys.includes(graphRangeStartMonth))) {
       setGraphRangeStartMonth(availableMonthKeys[0] || currentMonthKey);
     }
-    if (!graphRangeEndMonth) {
+    if (!graphRangeEndMonth || (availableMonthKeys.length > 0 && !availableMonthKeys.includes(graphRangeEndMonth))) {
       setGraphRangeEndMonth(availableMonthKeys[availableMonthKeys.length - 1] || currentMonthKey);
     }
   }, [graphRangeStartMonth, graphRangeEndMonth, availableMonthKeys, currentMonthKey]);
 
   useEffect(() => {
-    if (printSingleMonth) return;
-    setPrintSingleMonth(currentMonthKey);
-  }, [printSingleMonth, currentMonthKey]);
+    if (!printSingleMonth || (allMonthKeysForPrint.length > 0 && !allMonthKeysForPrint.includes(printSingleMonth))) {
+      setPrintSingleMonth(currentMonthKey);
+    }
+  }, [printSingleMonth, currentMonthKey, allMonthKeysForPrint]);
 
   useEffect(() => {
-    if (!printRangeStartMonth) {
+    if (!printRangeStartMonth || (allMonthKeysForPrint.length > 0 && !allMonthKeysForPrint.includes(printRangeStartMonth))) {
       setPrintRangeStartMonth(allMonthKeysForPrint[0] || currentMonthKey);
     }
-    if (!printRangeEndMonth) {
+    if (!printRangeEndMonth || (allMonthKeysForPrint.length > 0 && !allMonthKeysForPrint.includes(printRangeEndMonth))) {
       setPrintRangeEndMonth(allMonthKeysForPrint[allMonthKeysForPrint.length - 1] || currentMonthKey);
     }
   }, [printRangeStartMonth, printRangeEndMonth, allMonthKeysForPrint, currentMonthKey]);
